@@ -1,0 +1,29 @@
+#!/bin/bash --login
+
+########## Define Resources Needed with SBATCH Lines ##########
+
+#SBATCH --time=04:00:00             # limit of wall clock time - how long the job will run (same as -t)
+#SBATCH --ntasks=1                  # number of tasks - how many tasks (nodes) that you require (same as -n)
+#SBATCH --cpus-per-task=2          # number of CPUs (or cores) per task (same as -c)
+#SBATCH --mem=12g                   # memory required per node - amount of memory (in bytes)
+#SBATCH -J prep_qiime_data		  # the name of the job
+#SBATCH -A data-machine
+########## Command Lines to Run ##########
+
+root="$(git rev-parse --show-toplevel)"
+source ${root}/"gut_contents.env"
+
+input_data=${root}/output_data/01_Filter_And_Denoise
+output_data=${root}/output_data/02_Merge_Data
+
+mkdir -p ${output_data}
+
+singularity exec --bind $TMPDIR:/home/qiime2/q2cli $qiime_image qiime feature-table filter-samples \
+--i-table ${input_data}/${run}_${primerset}_denoised/table.qza \
+--p-min-features ${ps_lo_thresh} \
+--o-filtered-table ${output_data}/${run}_${primerset}_filtered_table.qza
+
+singularity exec --bind $TMPDIR:/home/qiime2/q2cli $qiime_image qiime feature-table filter-seqs \
+--i-data ${input_data}/${run}_${primerset}_denoised/representative_sequences.qza \
+--i-table ${output_data}/${run}_${primerset}_filtered_table.qza \
+--o-filtered-data ${output_data}/${run}_${primerset}_filtered_rep_seqs.qza

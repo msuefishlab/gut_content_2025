@@ -1,0 +1,33 @@
+#!/bin/bash --login
+
+########## Define Resources Needed with SBATCH Lines ##########
+
+#SBATCH --time=12:00:00             # limit of wall clock time - how long the job will run (same as -t)
+#SBATCH --ntasks=1                  # number of tasks - how many tasks (nodes) that you require (same as -n)
+#SBATCH --cpus-per-task=48          # number of CPUs (or cores) per task (same as -c)
+#SBATCH --mem=256g                   # memory required per node - amount of memory (in bytes)
+#SBATCH -J vsearch		  # the name of the job
+#SBATCH -A data-machine
+########## Command Lines to Run ##########
+
+root="$(git rev-parse --show-toplevel)"
+source ${root}/"gut_contents.env"
+
+input_data=${root}/output_data/03_Clustered_Data
+output_data=${root}/output_data/05_Taxanomic_Assignment
+database=${root}/output_data/04_Reference_Database
+
+mkdir -p ${output_data}
+
+singularity exec --bind $TMPDIR:/home/qiime2/q2cli $qiime_image qiime feature-classifier classify-consensus-vsearch --p-threads 48 \
+--i-query ${input_data}/${primer}_all_p985_seqs.qza \
+--i-reference-reads ${database}/bigCOI_Schmidtfinal429_seqs.qza \
+--i-reference-taxonomy ${database}/bigCOI_Schmidtfinal429_taxmap.qza \
+--p-perc-identity 1.0 --p-query-cov 0.94 \
+--verbose \
+--o-classification ${output_data}/${primer}_all_p985_taxa_VsearchOnly_p100_c94_bigCOISchmidt429.qza \
+--o-search-results ${output_data}/${primer}_all_p985_taxa_VsearchOnly_p100_c94_bigCOISchmidt429.search_results.qza
+
+singularity exec --bind $TMPDIR:/home/qiime2/q2cli $qiime_image qiime metadata tabulate \
+--m-input-file ${output_data}/${primer}_all_p985_taxa_VsearchOnly_p100_c94_bigCOISchmidt429.qza \
+--o-visualization ${output_data}/${primer}_all_p985_taxa_VsearchOnly_p100_c94_bigCOISchmidt429.qzv \

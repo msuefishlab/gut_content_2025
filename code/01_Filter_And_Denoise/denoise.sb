@@ -1,0 +1,26 @@
+#!/bin/bash --login
+
+########## Define Resources Needed with SBATCH Lines ##########
+
+#SBATCH --time=04:00:00             # limit of wall clock time - how long the job will run (same as -t)
+#SBATCH --ntasks=1                  # number of tasks - how many tasks (nodes) that you require (same as -n)
+#SBATCH --cpus-per-task=48          # number of CPUs (or cores) per task (same as -c)
+#SBATCH --mem=256g                   # memory required per node - amount of memory (in bytes)
+#SBATCH -J trim_qiime_data		  # the name of the job
+#SBATCH -A data-machine
+########## Command Lines to Run ##########
+
+root="$(git rev-parse --show-toplevel)"
+source ${root}/"gut_contents.env"
+
+output_data=${root}/output_data/01_Filter_And_Denoise
+
+singularity exec --bind $TMPDIR:/home/qiime2/q2cli $qiime_image qiime dada2 denoise-paired \
+--p-n-threads 48 \
+--i-demultiplexed-seqs ${output_data}/${run}_${primerset}_trimmed.qza \
+--p-trim-left-f 0 \
+--p-trim-left-r 0 \
+--p-trunc-len-f ${ftrunc} \
+--p-trunc-len-r ${rtrunc} \
+--output-dir ${output_data}/${run}_${primerset}_denoised \
+--verbose
