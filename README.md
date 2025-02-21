@@ -12,3 +12,20 @@
     		docker push jasongallant/r4guts
 
     singularity build r4guts.sif docker://jasongallant/r4guts:latest
+
+
+
+for qime 1:
+
+singularity build qiime1.sif docker://mbari/qiime1:latest
+
+
+for mkcoinr:
+
+For R computations:
+
+    	    docker build --platform linux/amd64 -t mkcoinr -f mkcoinr.Dockerfile .
+    		docker tag mkcoinr jasongallant/mkcoinr
+    		docker push jasongallant/mkcoinr
+
+    singularity build mkcoinr.sif docker://jasongallant/mkcoinr:latest

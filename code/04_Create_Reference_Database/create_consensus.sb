@@ -1,0 +1,18 @@
+#!/bin/bash --login
+
+########## Define Resources Needed with SBATCH Lines ##########
+
+#SBATCH --time=04:00:00             # limit of wall clock time - how long the job will run (same as -t)
+#SBATCH --ntasks=1                  # number of tasks - how many tasks (nodes) that you require (same as -n)
+#SBATCH --cpus-per-task=48          # number of CPUs (or cores) per task (same as -c)
+#SBATCH --mem=256g                   # memory required per node - amount of memory (in bytes)
+#SBATCH -J trim_qiime_data		  # the name of the job
+#SBATCH -A data-machine
+########## Command Lines to Run ##########
+
+root="$(git rev-parse --show-toplevel)"
+source ${root}/"gut_contents.env"
+
+output_data=${root}/output_data/04_Reference_Database
+
+singularity exec ${qiime1_image} bash -c "source activate qiime1 && python python create_consensus_taxonomy.py ${output_data}/allRecords_taxmap.txt ${output_data}/allRecords_nolabels.fasta ${output_data}/pid100_otus/allRecords_nolabels_otus.txt ${output_data}/allRecords_outmap.txt"

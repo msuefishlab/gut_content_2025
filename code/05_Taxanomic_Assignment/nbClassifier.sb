@@ -4,8 +4,8 @@
 
 #SBATCH --time=12:00:00             # limit of wall clock time - how long the job will run (same as -t)
 #SBATCH --ntasks=1                  # number of tasks - how many tasks (nodes) that you require (same as -n)
-#SBATCH --cpus-per-task=48          # number of CPUs (or cores) per task (same as -c)
-#SBATCH --mem=500G                   # memory required per node - amount of memory (in bytes)
+#SBATCH --cpus-per-task=50          # number of CPUs (or cores) per task (same as -c)
+#SBATCH --mem=0                   # memory required per node - amount of memory (in bytes)
 #SBATCH -J nbclassify		  # the name of the job
 #SBATCH -A data-machine
 ########## Command Lines to Run ##########
@@ -19,12 +19,12 @@ database=${root}/output_data/04_Reference_Database
 
 mkdir -p ${output_data}
 
-singularity exec --bind $TMPDIR:/home/qiime2/q2cli $qiime_image_old qiime feature-classifier classify-sklearn --p-n-jobs 48 \
+singularity exec --bind $TMPDIR:/home/qiime2/q2cli $qiime_image qiime feature-classifier classify-sklearn --p-n-jobs 48 --p-reads-per-batch auto \
 --i-reads ${input_data}/${primer}_all_p985_seqs.qza \
---i-classifier ${database}/nbClassifer_bigDB.qza \
+--i-classifier ${database}/COInr_Metazoa_LerayTrimmed.qiime_trainseq.classifier.qza \
 --verbose \
 --o-classification ${output_data}/${primer}_all_p985_taxa_nbclassified.qza 
 
-singularity exec --bind $TMPDIR:/home/qiime2/q2cli $qiime_image_old qiime metadata tabulate \
+singularity exec --bind $TMPDIR:/home/qiime2/q2cli $qiime_image qiime metadata tabulate \
 --m-input-file ${output_data}/${primer}_all_p985_taxa_nbclassified.qza  \
 --o-visualization ${output_data}/${primer}_all_p985_taxa_nbclassified.qzv
