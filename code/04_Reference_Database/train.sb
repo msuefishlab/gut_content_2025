@@ -13,23 +13,23 @@
 root="$(git rev-parse --show-toplevel)"
 source ${root}/"gut_contents.env"
 
-input_data=${root}/output_data/04_Reference_Database/COInr_taxfilt/qiime
+input_data=${root}/output_data/04_Reference_Database/
 output_data=${root}/output_data/04_Reference_Database
 
 mkdir -p ${output_data}
 
 singularity exec --bind $TMPDIR:/home/qiime2/q2cli $qiime_image qiime tools import \
   --type 'FeatureData[Sequence]' \
-  --input-path ${input_data}/COInr_Metazoa_LerayTrimmed.qiime_trainseq.fasta \
-  --output-path ${output_data}/COInr_Metazoa_LerayTrimmed.qiime_trainseq.seqs.qza
+  --input-path ${input_data}/COInr_Metazoa_and_Schmidt_LerayTrimmed.qiime_trainseq.fasta \
+  --output-path ${output_data}/COInr_Metazoa_and_Schmidt_LerayTrimmed.qiime_trainseq.seqs.qza
 
 singularity exec --bind $TMPDIR:/home/qiime2/q2cli $qiime_image qiime tools import \
   --type 'FeatureData[Taxonomy]' \
   --input-format HeaderlessTSVTaxonomyFormat \
-  --input-path ${input_data}/COInr_Metazoa_LerayTrimmed.qiime_taxon.txt \
-  --output-path ${output_data}/COInr_Metazoa_LerayTrimmed.qiime_trainseq.tax.qza
+  --input-path ${input_data}/COInr_Metazoa_and_Schmidt_LerayTrimmed.qiime_taxon.txt \
+  --output-path ${output_data}/COInr_Metazoa_and_Schmidt_LerayTrimmed.qiime_taxon.qza
 
   singularity exec --bind $TMPDIR:/home/qiime2/q2cli $qiime_image qiime feature-classifier fit-classifier-naive-bayes \
-  --i-reference-reads ${output_data}/COInr_Metazoa_LerayTrimmed.qiime_trainseq.seqs.qza \
-  --i-reference-taxonomy ${output_data}/COInr_Metazoa_LerayTrimmed.qiime_trainseq.tax.qza \
-  --o-classifier ${output_data}/COInr_Metazoa_LerayTrimmed.qiime_trainseq.classifier.qza
+  --i-reference-reads ${output_data}/COInr_Metazoa_and_Schmidt_LerayTrimmed.qiime_trainseq.seqs.qza \
+  --i-reference-taxonomy ${output_data}/COInr_Metazoa_and_Schmidt_LerayTrimmed.qiime_taxon.qza\
+  --o-classifier ${output_data}/COInr_Metazoa_and_Schmidt_LerayTrimmed.qiime_trainseq.classifier.qza
