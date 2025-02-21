@@ -7,8 +7,14 @@ RUN conda create -n mkcoinr python=3.9 -y && \
 	conda install -n mkcoinr -c bioconda vsearch -y && \
 	/opt/conda/envs/mkcoinr/bin/python -m pip install cutadapt nsdpy
 
-# Set the PATH so that executables in the mkcoinr environment are used by default
-ENV PATH /opt/conda/envs/mkcoinr/bin:$PATH
+# Install Git
+RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
+
+# Clone the repository into /opt/mkCOInr
+RUN git clone https://github.com/meglecz/mkCOInr.git /opt/mkCOInr
+
+# Add the conda environment's bin directory and the repository's scripts directory to PATH
+ENV PATH /opt/mkCOInr/scripts:/opt/conda/envs/mkcoinr/bin:$PATH
 
 # Default command (adjust as needed)
 CMD ["python"]
