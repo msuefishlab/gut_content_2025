@@ -1,0 +1,163 @@
+sampleid	genus	species_river	species_waveformtype	species	locality	river	sex	SL	parasite	waveformtype	primerset	both_primersets	seq_plate	main_river	seq_run	code2
+156BF2	Paramormyrops	P. kingsleyae bambomo	P. kingsleyae BP	P. kingsleyae	2019-014	bambomo	female	72	0	BP	BF2+BR1	yes	2	bambomo	2	156BF2
+311BF2	Paramormyrops	P. kingsleyae bambomo_3rivers	P. kingsleyae BP	P. kingsleyae	2019-022	bambomo_3rivers	male	106	0	BP	BF2+BR1	yes	2	bambomo	2	311BF2
+407BF2	Paramormyrops	P. kingsleyae apassa	P. kingsleyae TP	P. kingsleyae	2019-021	apassa	male	79	0	TP	BF2+BR1	yes	2	apassa	2	407BF2
+408BF2	Paramormyrops	P. kingsleyae apassa	P. kingsleyae TP	P. kingsleyae	2019-021	apassa	male	84	1	TP	BF2+BR1	yes	2	apassa	2	408BF2
+451BF2	Paramormyrops	P. szaboi bale	P. szaboi TP	P. szaboi	2019-026	bale	female	63	NA	TP	BF2+BR1	yes	2	bale	2	451BF2
+478BF2	Petrocephalus	Petrocephalus simus bale	Petrocephalus simus TP	Petrocephalus simus	2019-026	bale	juvenile	38	NA	TP	BF2+BR1	yes	2	bale	2	478BF2
+101BF2	Paramormyrops	P. kingsleyae iboundji	P. kingsleyae TP	P. kingsleyae	2019-001	iboundji	male	106	0	TP	BF2+BR1	yes	2	iboundji	2	101BF2
+112BF2	Paramormyrops	P. kingsleyae iboundji	P. kingsleyae TP	P. kingsleyae	2019-001	iboundji	female	78	0	TP	BF2+BR1	yes	2	iboundji	2	112BF2
+115BF2	Paramormyrops	P. kingsleyae mengono	P. kingsleyae BP	P. kingsleyae	2019-002	mengono	male	131	0	BP	BF2+BR1	yes	2	mengono	2	115BF2
+118BF2	Paramormyrops	P. kingsleyae mengono	P. kingsleyae BP	P. kingsleyae	2019-002	mengono	male	100	0	BP	BF2+BR1	yes	2	mengono	2	118BF2
+411BF2	Paramormyrops	P. kingsleyae apassa	P. kingsleyae TP	P. kingsleyae	2019-021	apassa	male	96	0	TP	BF2+BR1	yes	2	apassa	2	411BF2
+278BF2	Paramormyrops	P. kingsleyae apassa	P. kingsleyae TP	P. kingsleyae	2019-021	apassa	female	90	0	TP	BF2+BR1	yes	2	apassa	2	278BF2
+4BF2	Paramormyrops	P. kingsleyae iboundji	P. kingsleyae TP	P. kingsleyae	2019-001	iboundji	female	106	0	TP	BF2+BR1	yes	2	iboundji	2	4BF2
+150BF2	Paramormyrops	P. kingsleyae bambomo	P. kingsleyae BP	P. kingsleyae	2019-014	bambomo	female	105	0	BP	BF2+BR1	yes	2	bambomo	2	150BF2
+42BF2	Paramormyrops	P. kingsleyae mengono	P. kingsleyae BP	P. kingsleyae	2019-002	mengono	male	114	0	BP	BF2+BR1	yes	3	mengono	2	42BF2
+44BF2	Paramormyrops	P. kingsleyae mengono	P. kingsleyae BP	P. kingsleyae	2019-002	mengono	juvenile	77	0	BP	BF2+BR1	yes	3	mengono	2	44BF2
+51BF2	Paramormyrops	P. kingsleyae mengono	P. kingsleyae BP	P. kingsleyae	2019-002	mengono	juvenile	95	0	BP	BF2+BR1	yes	3	mengono	2	51BF2
+60BF2	Paramormyrops	P. kingsleyae iboundji	P. kingsleyae TP	P. kingsleyae	2019-001	iboundji	juvenile	65	0	TP	BF2+BR1	yes	3	iboundji	2	60BF2
+124BF2	Paramormyrops	P. kingsleyae iboundji	P. kingsleyae TP	P. kingsleyae	2019-001	iboundji	female	93	1	TP	BF2+BR1	yes	3	iboundji	2	124BF2
+153BF2	Paramormyrops	P. kingsleyae bambomo	P. kingsleyae BP	P. kingsleyae	2019-014	bambomo	female	83	0	BP	BF2+BR1	yes	3	bambomo	2	153BF2
+238BF2	Paramormyrops	P. NZO above_falls	P. NZO BP	P. NZO	2019-019	above_falls	male	169	0	BP	BF2+BR1	yes	3	above_falls	2	238BF2
+458BF2	Paramormyrops	P. szaboi bale	P. szaboi TP	P. szaboi	2019-026	bale	female	76	0	TP	BF2+BR1	yes	3	bale	2	458BF2
+277BF2	Paramormyrops	P. kingsleyae apassa	P. kingsleyae TP	P. kingsleyae	2019-021	apassa	male	90	2	TP	BF2+BR1	yes	3	apassa	2	277BF2
+447BF2	Paramormyrops	P. hopkinsi bale	P. hopkinsi BP	P. hopkinsi	2019-026	bale	juvenile	60	NA	BP	BF2+BR1	yes	3	bale	2	447BF2
+326BF2	Paramormyrops	P. kingsleyae bambomo	P. kingsleyae BP	P. kingsleyae	2019-014	bambomo	female	90	0	BP	BF2+BR1	yes	3	bambomo	2	326BF2
+366BF2	Paramormyrops	P. kingsleyae bambomo	P. kingsleyae BP	P. kingsleyae	2019-014	bambomo	female	69	0	BP	BF2+BR1	yes	3	bambomo	2	366BF2
+409BF2	Paramormyrops	P. kingsleyae apassa	P. kingsleyae TP	P. kingsleyae	2019-021	apassa	male	77	1	TP	BF2+BR1	yes	3	apassa	2	409BF2
+414BF2	Paramormyrops	P. kingsleyae apassa	P. kingsleyae TP	P. kingsleyae	2019-021	apassa	male	64	0	TP	BF2+BR1	yes	3	apassa	2	414BF2
+441BF2	Marcusenius	Marcusenius moori bale	Marcusenius moori BP	Marcusenius moori	2019-026	bale	male	64	NA	BP	BF2+BR1	yes	3	bale	2	441BF2
+433BF2	Paramormyrops	P. szaboi bale	P. szaboi TP	P. szaboi	2019-026	bale	female	92	0	TP	BF2+BR1	yes	3	bale	2	433BF2
+434BF2	Paramormyrops	P. szaboi bale	P. szaboi TP	P. szaboi	2019-026	bale	Male	92	NA	TP	BF2+BR1	yes	3	bale	2	434BF2
+449BF2	Paramormyrops	P. magnostipes bale	P. magnostipes TP	P. magnostipes	2019-026	bale	juvenile	73	NA	TP	BF2+BR1	yes	3	bale	2	449BF2
+452BF2	Paramormyrops	P. szaboi bale	P. szaboi TP	P. szaboi	2019-026	bale	female	71	NA	TP	BF2+BR1	yes	3	bale	2	452BF2
+459BF2	Paramormyrops	P. szaboi bale	P. szaboi TP	P. szaboi	2019-026	bale	female	69	0	TP	BF2+BR1	yes	3	bale	2	459BF2
+477BF2	Petrocephalus	Petrocephalus simus bale	Petrocephalus simus TP	Petrocephalus simus	2019-026	bale	juvenile	38	NA	TP	BF2+BR1	yes	3	bale	2	477BF2
+485BF2	Petrocephalus	Petrocephalus simus bale	Petrocephalus simus TP	Petrocephalus simus	2019-026	bale	juvenile	39	0	TP	BF2+BR1	yes	3	bale	2	485BF2
+516BF2	Marcusenius	Marcusenius moori bale	Marcusenius moori BP	Marcusenius moori	2019-026	bale	juvenile	49	NA	BP	BF2+BR1	yes	3	bale	2	516BF2
+262BF2	Mormyrops	Mormyrops zanchlirostris bengue	Mormyrops zanchlirostris BP	Mormyrops zanchlirostris	2019-020	bengue	male	78	0	BP	BF2+BR1	yes	3	bengue	2	262BF2
+43BF2	Paramormyrops	P. kingsleyae mengono	P. kingsleyae BP	P. kingsleyae	2019-002	mengono	juvenile	83	0	BP	BF2+BR1	yes	3	mengono	2	43BF2
+46BF2	Paramormyrops	P. kingsleyae mengono	P. kingsleyae BP	P. kingsleyae	2019-002	mengono	female	84	0	BP	BF2+BR1	yes	3	mengono	2	46BF2
+50BF2	Paramormyrops	P. kingsleyae mengono	P. kingsleyae BP	P. kingsleyae	2019-002	mengono	juvenile	89	1	BP	BF2+BR1	yes	3	mengono	2	50BF2
+235BF2	Paramormyrops	P. ngounensis below_falls	P. ngounensis BP	P. ngounensis	2019-015	below_falls	female	NA	0	BP	BF2+BR1	yes	3	below_falls	2	235BF2
+240BF2	Paramormyrops	P. offouensis above_falls	P. offouensis BP	P. offouensis	2019-019	above_falls	male	148	0	BP	BF2+BR1	yes	3	above_falls	2	240BF2
+245BF2	Mormyrops	Mormyrops nigricans above_falls	Mormyrops nigricans BP	Mormyrops nigricans	2019-019	above_falls	male	157	0	BP	BF2+BR1	yes	3	above_falls	2	245BF2
+312BF2	Paramormyrops	P. kingsleyae bambomo_3rivers	P. kingsleyae BP	P. kingsleyae	2019-022	bambomo_3rivers	NA	91	0	BP	BF2+BR1	yes	3	bambomo	2	312BF2
+315BF2	Paramormyrops	P. kingsleyae bambomo_3rivers	P. kingsleyae BP	P. kingsleyae	2019-022	bambomo_3rivers	female	73	0	BP	BF2+BR1	yes	3	bambomo	2	315BF2
+323BF2	Paramormyrops	P. kingsleyae bambomo	P. kingsleyae BP	P. kingsleyae	2019-014	bambomo	male	88	2	BP	BF2+BR1	yes	3	bambomo	2	323BF2
+363BF2	Paramormyrops	P. kingsleyae bambomo	P. kingsleyae BP	P. kingsleyae	2019-014	bambomo	female	67	1	BP	BF2+BR1	yes	3	bambomo	2	363BF2
+406BF2	Paramormyrops	P. kingsleyae apassa	P. kingsleyae TP	P. kingsleyae	2019-021	apassa	male	119	1	TP	BF2+BR1	yes	3	apassa	2	406BF2
+431BF2	Paramormyrops	P. kingsleyae bale	P. kingsleyae TP	P. kingsleyae	2019-026	bale	NA	85	0	TP	BF2+BR1	yes	3	bale	2	431BF2
+432BF2	Paramormyrops	P. kingsleyae bale	P. kingsleyae TP	P. kingsleyae	2019-026	bale	female	74	0	TP	BF2+BR1	yes	3	bale	2	432BF2
+438BF2	Petrocephalus	Petrocephalus simus bale	Petrocephalus simus TP	Petrocephalus simus	2019-026	bale	juvenile	42	NA	TP	BF2+BR1	yes	3	bale	2	438BF2
+454BF2	Paramormyrops	P. szaboi bale	P. szaboi TP	P. szaboi	2019-026	bale	juvenile	70	NA	TP	BF2+BR1	yes	3	bale	2	454BF2
+217BF2	Paramormyrops	P. offouensis below_falls	P. offouensis BP	P. offouensis	2019-015	below_falls	male	NA	0	BP	BF2+BR1	yes	3	below_falls	2	217BF2
+473BF2	Mormyrops	Mormyrops zanchlirostris bale	Mormyrops zanchlirostris BP	Mormyrops zanchlirostris	2019-026	bale	male	101	0	BP	BF2+BR1	yes	3	bale	2	473BF2
+475BF2	Petrocephalus	Petrocephalus simus bale	Petrocephalus simus TP	Petrocephalus simus	2019-026	bale	juvenile	49	0	TP	BF2+BR1	yes	3	bale	2	475BF2
+502BF2	Paramormyrops	P. kingsleyae bale	P. kingsleyae TP	P. kingsleyae	2019-026	bale	NA	125	0	TP	BF2+BR1	yes	3	bale	2	502BF2
+515BF2	Marcusenius	Marcusenius moori bale	Marcusenius moori BP	Marcusenius moori	2019-026	bale	juvenile	54	NA	BP	BF2+BR1	yes	3	bale	2	515BF2
+521BF2	Paramormyrops	P. VAD bale	P. VAD TP	P. VAD	2019-029	bale	male	100	NA	TP	BF2+BR1	yes	3	bale	2	521BF2
+525BF2	Paramormyrops	P. teugelsi bale	P. teugelsi BP	P. teugelsi	2019-029	bale	juvenile	20	NA	BP	BF2+BR1	yes	3	bale	2	525BF2
+505BF2	Paramormyrops	P. hopkinsi bale	P. hopkinsi BP	P. hopkinsi	2019-026	bale	NA	72	0	BP	BF2+BR1	yes	3	bale	2	505BF2
+223BF2	Paramormyrops	P. kingsleyae bambomo	P. kingsleyae BP	P. kingsleyae	2019-014	bambomo	male	98	0	BP	BF2+BR1	yes	3	bambomo	2	223BF2
+106BF2	Paramormyrops	P. kingsleyae iboundji	P. kingsleyae TP	P. kingsleyae	2019-001	iboundji	female	105	0	TP	BF2+BR1	yes	3	iboundji	2	106BF2
+472BF2	Mormyrops	Mormyrops zanchlirostris bale	Mormyrops zanchlirostris BP	Mormyrops zanchlirostris	2019-026	bale	male	208	0	BP	BF2+BR1	yes	3	bale	2	472BF2
+524BF2	Paramormyrops	P. kingsleyae bale	P. kingsleyae TP	P. kingsleyae	2019-029	bale	juvenile	46	NA	TP	BF2+BR1	yes	3	bale	2	524BF2
+484BF2	Petrocephalus	Petrocephalus simus bale	Petrocephalus simus TP	Petrocephalus simus	2019-026	bale	juvenile	36	0	TP	BF2+BR1	yes	3	bale	2	484BF2
+440BF2	Marcusenius	Marcusenius moori bale	Marcusenius moori BP	Marcusenius moori	2019-026	bale	male	59	NA	BP	BF2+BR1	yes	3	bale	2	440BF2
+259BF2	Mormyrops	Mormyrops zanchlirostris below_falls	Mormyrops zanchlirostris BP	Mormyrops zanchlirostris	2019-015	below_falls	male	230	0	BP	BF2+BR1	no	3	below_falls	2	259BF2
+457BF2	Paramormyrops	P. szaboi bale	P. szaboi TP	P. szaboi	2019-026	bale	juvenile	70	0	TP	BF2+BR1	yes	3	bale	2	457BF2
+463BF2	Paramormyrops	P. magnostipes bale	P. magnostipes TP	P. magnostipes	2019-026	bale	male	58	NA	TP	BF2+BR1	yes	3	bale	2	463BF2
+510BF2	Paramormyrops	P. kingsleyae bale	P. kingsleyae TP	P. kingsleyae	2019-026	bale	juvenile	69	NA	TP	BF2+BR1	yes	3	bale	2	510BF2
+464BF2	Paramormyrops	P. magnostipes bale	P. magnostipes TP	P. magnostipes	2019-026	bale	NA	68	NA	TP	BF2+BR1	yes	3	bale	2	464BF2
+62BF2	Paramormyrops	P. kingsleyae iboundji	P. kingsleyae TP	P. kingsleyae	2019-001	iboundji	female	84	0	TP	BF2+BR1	yes	3	iboundji	2	62BF2
+151BF2	Paramormyrops	P. kingsleyae bambomo	P. kingsleyae BP	P. kingsleyae	2019-014	bambomo	male	93	0	BP	BF2+BR1	no	3	bambomo	2	151BF2
+261BF2	Mormyrops	Mormyrops zanchlirostris bengue	Mormyrops zanchlirostris BP	Mormyrops zanchlirostris	2019-020	bengue	male	99	0	BP	BF2+BR1	yes	3	bengue	2	261BF2
+256BF2	Ivindomyrus	Ivindomyrus marchei below_falls	Ivindomyrus marchei BP	Ivindomyrus marchei	2019-015	below_falls	male	142	0	BP	BF2+BR1	no	3	below_falls	2	256BF2
+241BF2	Mormyrops	Mormyrops nigricans above_falls	Mormyrops nigricans BP	Mormyrops nigricans	2019-019	above_falls	male	250	NA	BP	BF2+BR1	yes	3	above_falls	2	241BF2
+527BF2	Paramormyrops	P. tenuicauda bale	P. tenuicauda BP	P. tenuicauda	2019-029	bale	juvenile	20	NA	BP	BF2+BR1	yes	3	bale	2	527BF2
+47BF2	Paramormyrops	P. kingsleyae mengono	P. kingsleyae BP	P. kingsleyae	2019-002	mengono	juvenile	96	0	BP	BF2+BR1	yes	3	mengono	2	47BF2
+321BF2	Paramormyrops	P. kingsleyae bambomo	P. kingsleyae BP	P. kingsleyae	2019-014	bambomo	male	111	0	BP	BF2+BR1	yes	3	bambomo	2	321BF2
+325BF2	Paramormyrops	P. kingsleyae bambomo	P. kingsleyae BP	P. kingsleyae	2019-014	bambomo	female	87	0	BP	BF2+BR1	yes	3	bambomo	2	325BF2
+410BF2	Paramormyrops	P. kingsleyae apassa	P. kingsleyae TP	P. kingsleyae	2019-021	apassa	female	84	1	TP	BF2+BR1	yes	3	apassa	2	410BF2
+413BF2	Paramormyrops	P. kingsleyae apassa	P. kingsleyae TP	P. kingsleyae	2019-021	apassa	juvenile	59	4	TP	BF2+BR1	yes	3	apassa	2	413BF2
+415BF2	Paramormyrops	P. kingsleyae apassa	P. kingsleyae TP	P. kingsleyae	2019-021	apassa	male	62	0	TP	BF2+BR1	yes	3	apassa	2	415BF2
+416BF2	Paramormyrops	P. kingsleyae apassa	P. kingsleyae TP	P. kingsleyae	2019-021	apassa	male	60	1	TP	BF2+BR1	yes	3	apassa	2	416BF2
+429BF2	Mormyrops	Mormyrops zanchlirostris bale	Mormyrops zanchlirostris BP	Mormyrops zanchlirostris	2019-026	bale	male	109	NA	BP	BF2+BR1	yes	3	bale	2	429BF2
+474BF2	Mormyrops	Mormyrops zanchlirostris bale	Mormyrops zanchlirostris BP	Mormyrops zanchlirostris	2019-026	bale	male	129	0	BP	BF2+BR1	yes	3	bale	2	474BF2
+482BF2	Petrocephalus	Petrocephalus simus bale	Petrocephalus simus TP	Petrocephalus simus	2019-026	bale	juvenile	38	0	TP	BF2+BR1	yes	3	bale	2	482BF2
+152BF2	Paramormyrops	P. kingsleyae bambomo	P. kingsleyae BP	P. kingsleyae	2019-014	bambomo	female	103	0	BP	BF2+BR1	yes	3	bambomo	2	152BF2
+274BF2	Paramormyrops	P. kingsleyae apassa	P. kingsleyae TP	P. kingsleyae	2019-021	apassa	female	104	1	TP	BF2+BR1	yes	3	apassa	2	274BF2
+320BF2	Paramormyrops	P. kingsleyae bambomo	P. kingsleyae BP	P. kingsleyae	2019-014	bambomo	male	129	1	BP	BF2+BR1	yes	3	bambomo	2	320BF2
+324BF2	Paramormyrops	P. kingsleyae bambomo	P. kingsleyae BP	P. kingsleyae	2019-014	bambomo	female	96	1	BP	BF2+BR1	yes	3	bambomo	2	324BF2
+327BF2	Paramormyrops	P. kingsleyae bambomo	P. kingsleyae BP	P. kingsleyae	2019-014	bambomo	female	78	0	BP	BF2+BR1	yes	3	bambomo	2	327BF2
+442BF2	Marcusenius	Marcusenius moori bale	Marcusenius moori BP	Marcusenius moori	2019-026	bale	juvenile	48	NA	BP	BF2+BR1	yes	3	bale	2	442BF2
+476BF2	Petrocephalus	Petrocephalus simus bale	Petrocephalus simus TP	Petrocephalus simus	2019-026	bale	juvenile	41	NA	TP	BF2+BR1	yes	4	bale	2	476BF2
+242BF2	Mormyrops	Mormyrops nigricans above_falls	Mormyrops nigricans BP	Mormyrops nigricans	2019-019	above_falls	NA	271	0	BP	BF2+BR1	yes	4	above_falls	2	242BF2
+506BF2	Marcusenius	Marcusenius moori bale	Marcusenius moori BP	Marcusenius moori	2019-026	bale	NA	35	NA	BP	BF2+BR1	yes	4	bale	2	506BF2
+219BF2	Paramormyrops	P. ngounensis below_falls	P. ngounensis BP	P. ngounensis	2019-015	below_falls	NA	150	0	BP	BF2+BR1	yes	4	below_falls	2	219BF2
+239BF2	Paramormyrops	P. offouensis above_falls	P. offouensis BP	P. offouensis	2019-019	above_falls	male	132	0	BP	BF2+BR1	no	4	above_falls	2	239BF2
+243BF2	Mormyrops	Mormyrops nigricans above_falls	Mormyrops nigricans BP	Mormyrops nigricans	2019-019	above_falls	male	160	0	BP	BF2+BR1	yes	4	above_falls	2	243BF2
+362BF2	Paramormyrops	P. kingsleyae bambomo	P. kingsleyae BP	P. kingsleyae	2019-014	bambomo	female	80	0	BP	BF2+BR1	yes	4	bambomo	2	362BF2
+504BF2	Paramormyrops	P. tenuicauda bale	P. tenuicauda BP	P. tenuicauda	2019-026	bale	NA	46	0	BP	BF2+BR1	no	4	bale	2	504BF2
+430BF2	Mormyrops	Mormyrops zanchlirostris bale	Mormyrops zanchlirostris BP	Mormyrops zanchlirostris	2019-026	bale	NA	183	NA	BP	BF2+BR1	yes	4	bale	2	430BF2
+279BF2	Paramormyrops	P. kingsleyae apassa	P. kingsleyae TP	P. kingsleyae	2019-021	apassa	female	90	0	TP	BF2+BR1	yes	4	apassa	2	279BF2
+246BF2	Paramormyrops	P. kingsleyae bambomo	P. kingsleyae BP	P. kingsleyae	2019-014	bambomo	male	103	0	BP	BF2+BR1	no	4	bambomo	2	246BF2
+313BF2	Paramormyrops	kingsleyae bambomo_3rivers	kingsleyae BP	kingsleyae	2019-022	bambomo_3rivers	female	86	0	BP	BF2 + BR1	yes	6	bambomo	3	313BF2
+444BF2	Marcusenius	Marcusenius moori bale	Marcusenius moori BP	Marcusenius moori	2019-026	bale	juvenile	49	NA	BP	BF2 + BR1	yes	6	bale	3	444BF2
+435BF2	Marcusenius	Marcusenius moori bale	Marcusenius moori BP	Marcusenius moori	2019-026	bale	NA	85	NA	BP	BF2 + BR1	yes	6	bale	3	435BF2
+436BF2	Marcusenius	Marcusenius moori bale	Marcusenius moori BP	Marcusenius moori	2019-026	bale	female	110	NA	BP	BF2 + BR1	yes	6	bale	3	436BF2
+507BF2	Mormyrops	Mormyrops zanchlirostris bale	Mormyrops zanchlirostris BP	Mormyrops zanchlirostris	2019-026	bale	NA	90	NA	BP	BF2 + BR1	yes	6	bale	3	507BF2
+275BF2	Paramormyrops	P. kingsleyae apassa	P. kingsleyae TP	P. kingsleyae	2019-021	apassa	female	100	0	TP	BF2 + BR1	yes	6	apassa	3	275BF2
+154BF2	Paramormyrops	P. kingsleyae bambomo	P. kingsleyae BP	P. kingsleyae	2019-014	bambomo	female	78	0	BP	BF2 + BR1	yes	6	bambomo	3	154BF2
+61BF2	Paramormyrops	P. kingsleyae iboundji	P. kingsleyae TP	P. kingsleyae	2019-001	iboundji	female	91	0	TP	BF2 + BR1	yes	6	iboundji	3	61BF2
+48BF2	Paramormyrops	P. kingsleyae mengono	P. kingsleyae BP	P. kingsleyae	2019-002	mengono	male	103	2	BP	BF2 + BR1	yes	6	mengono	3	48BF2
+49BF2	Paramormyrops	P. kingsleyae mengono	P. kingsleyae BP	P. kingsleyae	2019-002	mengono	juvenile	72	3	BP	BF2 + BR1	yes	6	mengono	3	49BF2
+249BF2	Paramormyrops	kingsleyae bambomo	kingsleyae BP	kingsleyae	2019-014	bambomo	female	92	0	BP	BF2 + BR1	no	6	bambomo	3	249BF2
+364BF2	Paramormyrops	P. kingsleyae bambomo	P. kingsleyae BP	P. kingsleyae	2019-014	bambomo	female	79	0	BP	BF2 + BR1	yes	6	bambomo	3	364BF2
+367BF2	Paramormyrops	P. kingsleyae bambomo	P. kingsleyae BP	P. kingsleyae	2019-014	bambomo	male	69	0	BP	BF2 + BR1	yes	6	bambomo	3	367BF2
+369BF2	Paramormyrops	P. kingsleyae bambomo	P. kingsleyae BP	P. kingsleyae	2019-014	bambomo	female	75	0	BP	BF2 + BR1	yes	6	bambomo	3	369BF2
+86BF2	Paramormyrops	P. kingsleyae mengono	P. kingsleyae BP	P. kingsleyae	2019-002	mengono	male	120	0	BP	BF2 + BR1	yes	6	mengono	3	86BF2
+428BF2	Mormyrops	Mormyrops zanchlirostris bale	Mormyrops zanchlirostris	Mormyrops zanchlirostris	2019-026	bale	female	160	NA		BF2 + BR1	yes	6	bale	3	428BF2
+418BF2	Paramormyrops	P. kingsleyae apassa	P. kingsleyae	P. kingsleyae	2019-021	apassa	juvenile	61	1		BF2 + BR1	yes	6	apassa	3	418BF2
+443BF2	Marcusenius	Marcusenius moori bale	Marcusenius moori BP	Marcusenius moori	2019-026	bale	juvenile	53	NA	BP	BF2 + BR1	yes	6	bale	3	443BF2
+483BF2	Petrocephalus	Petrocephalus simus bale	Petrocephalus simus TP	Petrocephalus simus	2019-026	bale	juvenile	36	0	TP	BF2 + BR1	yes	6	bale	3	483BF2
+220BF2	Marcusenius	Marcusenius moori below_falls	Marcusenius moori BP	Marcusenius moori	2019-015	below_falls	male	182	0	BP	BF2 + BR1	yes	6	below_falls	3	220BF2
+318BF2	Paramormyrops	P. kingsleyae bambomo_3rivers	P. kingsleyae BP	P. kingsleyae	2019-022	bambomo_3rivers	male	66	0	BP	BF2 + BR1	yes	6	bambomo	3	318BF2
+84BF2	Paramormyrops	P. kingsleyae mengono	P. kingsleyae BP	P. kingsleyae	2019-002	mengono	female	95	0	BP	BF2 + BR1	yes	6	mengono	3	84BF2
+234BF2	Paramormyrops	P. SN2 below_falls	P. SN2 BP	P. SN2	2019-015	below_falls	female	NA	0	BP	BF2 + BR1	yes	6	below_falls	3	234BF2
+224BF2	Paramormyrops	P. kingsleyae bambomo	P. kingsleyae BP	P. kingsleyae	2019-014	bambomo	female	85	0	BP	BF2 + BR1	yes	6	bambomo	3	224BF2
+546BF2	Paramormyrops	P. kingsleyae bale	P. kingsleyae TP	P. kingsleyae	2019-026	bale	Male	88	NA	TP	BF2 + BR1	yes	6	bale	3	546BF2
+244BF2	Mormyrops	Mormyrops nigricans above_falls	Mormyrops nigricans BP	Mormyrops nigricans	2019-019	above_falls	male	260	0	BP	BF2 + BR1	yes	6	above_falls	3	244BF2
+512BF2	Marcusenius	Marcusenius moori bale	Marcusenius moori BP	Marcusenius moori	2019-026	bale	juvenile	73	NA	BP	BF2 + BR1	yes	6	bale	3	512BF2
+508BF2	Mormyrops	Mormyrops zanchlirostris bale	Mormyrops zanchlirostris BP	Mormyrops zanchlirostris	2019-026	bale	female	177	NA	BP	BF2 + BR1	yes	6	bale	3	508BF2
+460BF2	Paramormyrops	P. kingsleyae bale	P. kingsleyae TP	P. kingsleyae	2019-026	bale	juvenile	49	0	TP	BF2 + BR1	yes	6	bale	3	460BF2
+462BF2	Paramormyrops	P. tenuicauda bale	P. tenuicauda BP	P. tenuicauda	2019-026	bale	juvenile	51	NA	BP	BF2 + BR1	yes	6	bale	3	462BF2
+456BF2	Paramormyrops	P. szaboi bale	P. szaboi TP	P. szaboi	2019-026	bale	female	78	0	TP	BF2 + BR1	yes	6	bale	3	456BF2
+109BF2	Paramormyrops	P. kingsleyae iboundji	P. kingsleyae TP	P. kingsleyae	2019-001	iboundji	female	86	0	TP	BF2 + BR1	yes	6	iboundji	3	109BF2
+82BF2	Paramormyrops	P. kingsleyae mengono	P. kingsleyae BP	P. kingsleyae	2019-002	mengono	male	135	0	BP	BF2 + BR1	yes	6	mengono	3	82BF2
+248BF2	Paramormyrops	P. kingsleyae bambomo	P. kingsleyae BP	P. kingsleyae	2019-014	bambomo	female	100	0	BP	BF2 + BR1	yes	6	bambomo	3	248BF2
+122BF2	Paramormyrops	P. kingsleyae iboundji	P. kingsleyae TP	P. kingsleyae	2019-001	iboundji	male	134	0	TP	BF2 + BR1	yes	6	iboundji	3	122BF2
+282BF2	Paramormyrops	P. kingsleyae apassa	P. kingsleyae TP	P. kingsleyae	2019-021	apassa	male	79	1	TP	BF2 + BR1	yes	6	apassa	3	282BF2
+453BF2	Paramormyrops	P. szaboi bale	P. szaboi TP	P. szaboi	2019-026	bale	juvenile	72	NA	TP	BF2 + BR1	yes	6	bale	3	453BF2
+103BF2	Paramormyrops	P. kingsleyae iboundji	P. kingsleyae TP	P. kingsleyae	2019-001	iboundji	female	100	0	TP	BF2 + BR1	yes	6	iboundji	3	103BF2
+98BF2	Paramormyrops	P. kingsleyae iboundji	P. kingsleyae TP	P. kingsleyae	2019-001	iboundji	male	122	0	TP	BF2 + BR1	yes	6	iboundji	3	98BF2
+45BF2	Paramormyrops	P. kingsleyae mengono	P. kingsleyae BP	P. kingsleyae	2019-002	mengono	female	98	0	BP	BF2 + BR1	yes	1	mengono	1	45BF2
+412BF2	Paramormyrops	P. kingsleyae apassa	P. kingsleyae TP	P. kingsleyae	2019-021	apassa	female	100	1	TP	BF2 + BR1	yes	1	apassa	1	412BF2
+316BF2	Paramormyrops	P. kingsleyae bambomo	P. kingsleyae TP	P. kingsleyae	2019-022	bambomo	female	72	0	TP	BF2 + BR1	yes	1	bambomo	1	316BF2
+276BF2	Paramormyrops	P. kingsleyae apassa	P. kingsleyae TP	P. kingsleyae	2019-021	apassa	female	90	0	TP	BF2 + BR1	yes	1	apassa	1	276BF2
+365BF2	Paramormyrops	P. kingsleyae bambomo	P. kingsleyae BP	P. kingsleyae	2019-014	bambomo	female	70	0	BP	BF2 + BR1	yes	1	bambomo	1	365BF2
+45BP_BF2	Paramormyrops	P. kingsleyae mengono	P. kingsleyae BP	P. kingsleyae	2019-002	mengono	female	98	0	BP	BF2 + BR1	yes	1	mengono	1	45BP_BF2
+412BP_BF2	Paramormyrops	P. kingsleyae apassa	P. kingsleyae TP	P. kingsleyae	2019-021	apassa	female	100	1	TP	BF2 + BR1	yes	1	apassa	1	412BP_BF2
+316BP_BF2	Paramormyrops	P. kingsleyae bambomo	P. kingsleyae TP	P. kingsleyae	2019-022	bambomo	female	72	0	TP	BF2 + BR1	yes	1	bambomo	1	316BP_BF2
+276BP_BF2	Paramormyrops	P. kingsleyae apassa	P. kingsleyae TP	P. kingsleyae	2019-021	apassa	female	90	0	TP	BF2 + BR1	yes	1	apassa	1	276BP_BF2
+365BP_BF2	Paramormyrops	P. kingsleyae bambomo	P. kingsleyae BP	P. kingsleyae	2019-014	bambomo	female	70	0	BP	BF2 + BR1	yes	1	bambomo	1	365BP_BF2
+243BF2rep	Mormyrops	Mormyrops nigricans above_falls	Mormyrops nigricans BP	Mormyrops nigricans	2019-019	above_falls	male	160	0	BP	BF2+BR1	yes	6	above_falls	3	243BF2rep
+464BF2rep	Paramormyrops	P. magnostipes bale	P. magnostipes TP	P. magnostipes	2019-026	bale	NA	68	NA	TP	BF2+BR1	yes	6	bale	3	464BF2rep
+219BF2rep	Paramormyrops	P. ngounensis below_falls	P. ngounensis BP	P. ngounensis	2019-015	below_falls	NA	150	0	BP	BF2+BR1	yes	6	below_falls	3	219BF2rep
+311BF2rep	Paramormyrops	P. kingsleyae bambomo_3rivers	P. kingsleyae BP	P. kingsleyae	2019-022	bambomo_3rivers	male	106	0	BP	BF2+BR1	yes	6	bambomo	3	311BF2rep
+124BF2rep	Paramormyrops	P. kingsleyae iboundji	P. kingsleyae TP	P. kingsleyae	2019-001	iboundji	female	93	1	TP	BF2+BR1	yes	6	iboundji	3	124BF2rep
+475BF2rep	Petrocephalus	Petrocephalus simus bale	Petrocephalus simus TP	Petrocephalus simus	2019-026	bale	juvenile	49	0	TP	BF2+BR1	yes	6	bale	3	475BF2rep
+315BF2rep	Paramormyrops	P. kingsleyae bambomo_3rivers	P. kingsleyae BP	P. kingsleyae	2019-022	bambomo_3rivers	female	73	0	BP	BF2+BR1	yes	6	bambomo	3	315BF2rep
+156BF2rep	Paramormyrops	P. kingsleyae bambomo	P. kingsleyae BP	P. kingsleyae	2019-014	bambomo	female	72	0	BP	BF2+BR1	yes	6	bambomo	3	156BF2rep
