@@ -69,7 +69,7 @@ for primer in "${primers[@]}"; do
     echo "Step 6: Rarefying prey-only table..."
     singularity exec --bind $SCRATCH/tmp:/home/qiime2/q2cli $qiime_image qiime feature-table rarefy \
         --i-table ${output_dir}/${primer}_all_p985_table_filtd_NO_HOST.qza \
-        --p-sampling-depth 3000 \
+        --p-sampling-depth 5000 \
         --o-rarefied-table ${output_dir}/${primer}_all_p985_table_filtd_NO_HOST.rarefied.qza
     
     # --- STEP 7: Taxa barplot (prey only, rarefied) ---
@@ -83,14 +83,3 @@ for primer in "${primers[@]}"; do
     echo "Completed: $primer"
     echo ""
 done
-
-echo "========================================"
-echo "IMPORTANT NEXT STEPS:"
-echo "========================================"
-echo ""
-echo "1. Check the *_NO_HOST.qzv files to see prey-only read distributions"
-echo "2. Adjust rarefaction depth (currently set to 3000) if needed"
-echo "   - For PS1: ~70% of reads were prey in BP, ~46% in TP"
-echo "   - Original 5000 reads → expect ~2300-3500 prey reads"
-echo "3. Re-run cross-validation with the new *_NO_HOST.rarefied.qza files"
-echo ""
