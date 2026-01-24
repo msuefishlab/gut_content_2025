@@ -21,7 +21,7 @@ mkdir -p ${output_data}
 
 singularity exec --bind $TMPDIR:/home/qiime2/q2cli $qiime_image qiime feature-classifier classify-sklearn --p-n-jobs 48 --p-reads-per-batch auto \
 --i-reads ${input_data}/${primer}_all_p985_seqs.qza \
---i-classifier ${database}/COInr_Metazoa_LerayTrimmed.qiime_trainseq.classifier.qza \
+--i-classifier ${database}/COInr_Metazoa_and_Schmidt_LerayTrimmed.qiime_trainseq.classifier.qza \
 --verbose \
 --o-classification ${output_data}/${primer}_all_p985_taxa_nbclassified.qza 
 

@@ -21,13 +21,13 @@ mkdir -p ${output_data}
 
 singularity exec --bind $TMPDIR:/home/qiime2/q2cli $qiime_image qiime feature-classifier classify-consensus-vsearch --p-threads 48 \
 --i-query ${input_data}/${primer}_all_p985_seqs.qza \
---i-reference-reads ${database}/bigCOI_Schmidtfinal429_seqs.qza \
---i-reference-taxonomy ${database}/bigCOI_Schmidtfinal429_taxmap.qza \
---p-perc-identity 1.0 --p-query-cov 0.94 \
+--i-reference-reads ${database}/COInr_Metazoa_and_Schmidt_LerayTrimmed.qiime_trainseq.seqs.qza \
+--i-reference-taxonomy ${database}/COInr_Metazoa_and_Schmidt_LerayTrimmed.qiime_taxon.qza \
+--p-perc-identity 0.95 --p-query-cov 0.94 \
 --verbose \
---o-classification ${output_data}/${primer}_all_p985_taxa_VsearchOnly_p100_c94_bigCOISchmidt429.qza \
---o-search-results ${output_data}/${primer}_all_p985_taxa_VsearchOnly_p100_c94_bigCOISchmidt429.search_results.qza
+--o-classification ${output_data}/${primer}_all_p985_taxa_VsearchOnly_p95_c94_COInr_Metazoa_and_Schmidt_LerayTrimmed.qza \
+--o-search-results ${output_data}/${primer}_all_p985_taxa_VsearchOnly_p95_c94_COInr_Metazoa_and_Schmidt_LerayTrimmed.search_results.qza
 
 singularity exec --bind $TMPDIR:/home/qiime2/q2cli $qiime_image qiime metadata tabulate \
---m-input-file ${output_data}/${primer}_all_p985_taxa_VsearchOnly_p100_c94_bigCOISchmidt429.qza \
---o-visualization ${output_data}/${primer}_all_p985_taxa_VsearchOnly_p100_c94_bigCOISchmidt429.qzv \
+--m-input-file ${output_data}/${primer}_all_p985_taxa_VsearchOnly_p95_c94_COInr_Metazoa_and_Schmidt_LerayTrimmed.qza  \
+--o-visualization ${output_data}/${primer}_all_p985_taxa_VsearchOnly_p95_c94_COInr_Metazoa_and_Schmidt_LerayTrimmed.qzv
