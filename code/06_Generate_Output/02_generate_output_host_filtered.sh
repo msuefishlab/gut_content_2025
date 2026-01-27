@@ -65,11 +65,11 @@ for primer in "${primers[@]}"; do
     # --- STEP 6: Rarefy prey-only table ---
     # IMPORTANT: Adjust --p-sampling-depth based on the _NO_HOST.qzv summary!
     # Choose a depth that retains most samples while providing adequate coverage
-    # This may need to be LOWER than 5000 since host reads are now removed
+    # This may need to be LOWER than 3000 since host reads are now removed
     echo "Step 6: Rarefying prey-only table..."
     singularity exec --bind $SCRATCH/tmp:/home/qiime2/q2cli $qiime_image qiime feature-table rarefy \
         --i-table ${output_dir}/${primer}_all_p985_table_filtd_NO_HOST.qza \
-        --p-sampling-depth 5000 \
+        --p-sampling-depth 3000 \
         --o-rarefied-table ${output_dir}/${primer}_all_p985_table_filtd_NO_HOST.rarefied.qza
     
     # --- STEP 7: Taxa barplot (prey only, rarefied) ---
