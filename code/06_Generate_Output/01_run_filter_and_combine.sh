@@ -10,10 +10,10 @@ for primer in "${primers[@]}"; do
 
 
 	#Transform VSEARCH results to TSV
-	echo singularity exec --bind $SCRATCH/tmp:/home/qiime2/q2cli $qiime_image qiime tools export --input-path ${input_dir}/${primer}_all_p985_taxa_VsearchOnly_p95_c94_COInr_Metazoa_and_Schmidt_LerayTrimmed.qza --output-path ${output_dir}
-	singularity exec --bind $SCRATCH/tmp:/home/qiime2/q2cli $qiime_image qiime tools export --input-path ${input_dir}/${primer}_all_p985_taxa_VsearchOnly_p95_c94_COInr_Metazoa_and_Schmidt_LerayTrimmed.qza --output-path ${output_dir}
-	echo mv ${output_dir}/taxonomy.tsv ${output_dir}/${primer}_all_p985_taxa_VsearchOnly_p95_c94_COInr_Metazoa_and_Schmidt_LerayTrimmed.tsv
-	mv ${output_dir}/taxonomy.tsv ${output_dir}/${primer}_all_p985_taxa_VsearchOnly_p95_c94_COInr_Metazoa_and_Schmidt_LerayTrimmed.tsv
+	echo singularity exec --bind $SCRATCH/tmp:/home/qiime2/q2cli $qiime_image qiime tools export --input-path ${input_dir}/${primer}_all_p985_taxa_VsearchOnly_p80_c94_COInr_Metazoa_and_Schmidt_LerayTrimmed.qza --output-path ${output_dir}
+	singularity exec --bind $SCRATCH/tmp:/home/qiime2/q2cli $qiime_image qiime tools export --input-path ${input_dir}/${primer}_all_p985_taxa_VsearchOnly_p80_c94_COInr_Metazoa_and_Schmidt_LerayTrimmed.qza --output-path ${output_dir}
+	echo mv ${output_dir}/taxonomy.tsv ${output_dir}/${primer}_all_p985_taxa_VsearchOnly_p80_c94_COInr_Metazoa_and_Schmidt_LerayTrimmed.tsv
+	mv ${output_dir}/taxonomy.tsv ${output_dir}/${primer}_all_p985_taxa_VsearchOnly_p80_c94_COInr_Metazoa_and_Schmidt_LerayTrimmed.tsv
 
 	#Transform nbClassifier results to TSV
 	echo singularity exec --bind $SCRATCH/tmp:/home/qiime2/q2cli $qiime_image qiime tools export --input-path ${input_dir}/${primer}_all_p985_taxa_nbclassified.qza --output-path ${output_dir}
@@ -22,16 +22,16 @@ for primer in "${primers[@]}"; do
 	mv ${output_dir}/taxonomy.tsv ${output_dir}/${primer}_all_p985_taxa_nbclassified.tsv
 
 	#Identify the taxa best classified by VSEARCH and NBClassifier
-	echo singularity exec ${rimage} Rscript ${root}/code/06_Generate_Output/filterVsearch_nbClassifier.R ${output_dir}/${primer}_all_p985_taxa_VsearchOnly_p95_c94_COInr_Metazoa_and_Schmidt_LerayTrimmed.tsv ${output_dir}/${primer}_all_p985_taxa_nbclassified.tsv ${output_dir} ${primer}
-	singularity exec ${rimage} Rscript ${root}/code/06_Generate_Output/filterVsearch_nbClassifier.R ${output_dir}/${primer}_all_p985_taxa_VsearchOnly_p95_c94_COInr_Metazoa_and_Schmidt_LerayTrimmed.tsv ${output_dir}/${primer}_all_p985_taxa_nbclassified.tsv ${output_dir} ${primer}
+	echo singularity exec ${rimage} Rscript ${root}/code/06_Generate_Output/filterVsearch_nbClassifier.R ${output_dir}/${primer}_all_p985_taxa_VsearchOnly_p80_c94_COInr_Metazoa_and_Schmidt_LerayTrimmed.tsv ${output_dir}/${primer}_all_p985_taxa_nbclassified.tsv ${output_dir} ${primer}
+	singularity exec ${rimage} Rscript ${root}/code/06_Generate_Output/filterVsearch_nbClassifier.R ${output_dir}/${primer}_all_p985_taxa_VsearchOnly_p80_c94_COInr_Metazoa_and_Schmidt_LerayTrimmed.tsv ${output_dir}/${primer}_all_p985_taxa_nbclassified.tsv ${output_dir} ${primer}
 
    #Filter the VSEARCH file to retain just the Feature IDs required:
    	echo singularity exec --bind $SCRATCH/tmp:/home/qiime2/q2cli $qiime_image qiime rescript filter-taxa \
-	--i-taxonomy ${input_dir}/${primer}_all_p985_taxa_VsearchOnly_p95_c94_COInr_Metazoa_and_Schmidt_LerayTrimmed.qza \
+	--i-taxonomy ${input_dir}/${primer}_all_p985_taxa_VsearchOnly_p80_c94_COInr_Metazoa_and_Schmidt_LerayTrimmed.qza \
 	--m-ids-to-keep-file ${output_dir}/${primer}_filtd_taxlist_vsearch.txt \
 	--o-filtered-taxonomy ${output_dir}/${primer}_all_p985_taxa_filtd_vsearch.qza
 	singularity exec --bind $SCRATCH/tmp:/home/qiime2/q2cli $qiime_image qiime rescript filter-taxa \
-	--i-taxonomy ${input_dir}/${primer}_all_p985_taxa_VsearchOnly_p95_c94_COInr_Metazoa_and_Schmidt_LerayTrimmed.qza \
+	--i-taxonomy ${input_dir}/${primer}_all_p985_taxa_VsearchOnly_p80_c94_COInr_Metazoa_and_Schmidt_LerayTrimmed.qza \
 	--m-ids-to-keep-file ${output_dir}/${primer}_filtd_taxlist_vsearch.txt \
 	--o-filtered-taxonomy ${output_dir}/${primer}_all_p985_taxa_filtd_vsearch.qza
 
