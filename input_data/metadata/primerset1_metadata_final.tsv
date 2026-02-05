@@ -1,4 +1,5 @@
 sampleid	genus	species_river	species_waveform	species	locality	river	sex	SL	parasite	waveformtype	primerset	both_primersets	seq_plate	main_river	seq_run	code2
+#q2:types	categorical	categorical	categorical	categorical	categorical	categorical	categorical	categorical categorical numeric	categorical	categorical	categorical	categorical	categorical	categorical	categorical	categorical
 45	Paramormyrops	P. kingsleyae mengono	P. kingsleyae BP	P. kingsleyae	2019-002	mengono	female	98	no	BP	mlCOIintF + BR2	yes	1	mengono	1	45
 412	Paramormyrops	P. kingsleyae apassa	P. kingsleyae TP	P. kingsleyae	2019-021	apassa	female	100	yes	TP	mlCOIintF + BR2	yes	1	apassa	1	412
 316	Paramormyrops	P. kingsleyae bambomo	P. kingsleyae TP	P. kingsleyae	2019-022	bambomo	female	72	no	TP	mlCOIintF + BR2	yes	1	bambomo	1	316
@@ -51,9 +52,9 @@ sampleid	genus	species_river	species_waveform	species	locality	river	sex	SL	para
 105	Paramormyrops	P. kingsleyae iboundji	P. kingsleyae TP	P. kingsleyae	2019-001	iboundji	female	86	0	TP	mlCOIintF+BR2	no	1	iboundji	2	105
 108	Paramormyrops	P. kingsleyae iboundji	P. kingsleyae TP	P. kingsleyae	2019-001	iboundji	female	90	0	TP	mlCOIintF+BR2	no	1	iboundji	2	108
 111	Paramormyrops	P. kingsleyae iboundji	P. kingsleyae TP	P. kingsleyae	2019-001	iboundji	male	90	0	TP	mlCOIintF+BR2	no	1	iboundji	2	111
-217	Paramormyrops	P. offouensis below_falls	P. offouensis BP	P. offouensis	2019-015	below_falls	male	?	0	BP	mlCOIintF+BR2	yes	1	below_falls	2	217
+217	Paramormyrops	P. offouensis below_falls	P. offouensis BP	P. offouensis	2019-015	below_falls	male	NA	0	BP	mlCOIintF+BR2	yes	1	below_falls	2	217
 223	Paramormyrops	P. kingsleyae bambomo	P. kingsleyae BP	P. kingsleyae	2019-014	bambomo	male	98	0	BP	mlCOIintF+BR2	yes	1	bambomo	2	223
-235	Paramormyrops	P. ngounensis below_falls	P. ngounensis BP	P. ngounensis	2019-015	below_falls	female	?	0	BP	mlCOIintF+BR2	yes	1	below_falls	2	235
+235	Paramormyrops	P. ngounensis below_falls	P. ngounensis BP	P. ngounensis	2019-015	below_falls	female	NA	0	BP	mlCOIintF+BR2	yes	1	below_falls	2	235
 240	Paramormyrops	P. offouensis above_falls	P. offouensis BP	P. offouensis	2019-019	above_falls	male	148	0	BP	mlCOIintF+BR2	yes	1	above_falls	2	240
 245	Mormyrops	Mormyrops nigricans above_falls	Mormyrops nigricans BP	Mormyrops nigricans	2019-019	above_falls	male	157	0	BP	mlCOIintF+BR2	yes	1	above_falls	2	245
 312	Paramormyrops	P. kingsleyae bambomo_3rivers	P. kingsleyae BP	P. kingsleyae	2019-022	bambomo_3rivers	NA	91	0	BP	mlCOIintF+BR2	yes	1	bambomo	2	312
@@ -66,12 +67,12 @@ sampleid	genus	species_river	species_waveform	species	locality	river	sex	SL	para
 438	Petrocephalus	Petrocephalus simus bale	Petrocephalus simus TP	Petrocephalus simus	2019-026	bale	juvenile	42	NA	TP	mlCOIintF+BR2	yes	1	bale	2	438
 450	Paramormyrops	P. szaboi bale	P. szaboi TP	P. szaboi	2019-026	bale	male	86	NA	TP	mlCOIintF+BR2	no	1	bale	2	450
 454	Paramormyrops	P. szaboi bale	P. szaboi TP	P. szaboi	2019-026	bale	juvenile	70	NA	TP	mlCOIintF+BR2	yes	1	bale	2	454
-473	Mormyrops	Mormyrops zanchlirostris bale	Mormyrops zanchlirostris BP	Mormyrops zanchlirostris	2019-026	bale	male	101	0	BP	mlCOIintF+BR2	yes	1	bale	2	473
+473	Mormyrops	Mormyrops zanchlirostris bale	Mormyrops zanchlirostris BP	M. zanchlirostrus	2019-026	bale	male	101	0	BP	mlCOIintF+BR2	yes	1	bale	2	473
 475	Petrocephalus	Petrocephalus simus bale	Petrocephalus simus TP	Petrocephalus simus	2019-026	bale	juvenile	49	0	TP	mlCOIintF+BR2	yes	1	bale	2	475
 502	Paramormyrops	P. kingsleyae bale	P. kingsleyae TP	P. kingsleyae	2019-026	bale	NA	125	0	TP	mlCOIintF+BR2	yes	1	bale	2	502
 515	Marcusenius	Marcusenius moori bale	Marcusenius moori BP	Marcusenius moori	2019-026	bale	juvenile	54	NA	BP	mlCOIintF+BR2	yes	1	bale	2	515
 521	Paramormyrops	P. VAD bale	P. VAD TP	P. VAD	2019-029	bale	male	100	NA	TP	mlCOIintF+BR2	yes	1	bale	2	521
-525	Paramormyrops	P. teugelsi bale	P. teugelsi BP	P. teugelsi	2019-029	bale	juvenile	very small	NA	BP	mlCOIintF+BR2	yes	1	bale	2	525
+525	Paramormyrops	P. teugelsi bale	P. teugelsi BP	P. teugelsi	2019-029	bale	juvenile	NA	NA	BP	mlCOIintF+BR2	yes	1	bale	2	525
 505	Paramormyrops	P. hopkinsi bale	P. hopkinsi BP	P. hopkinsi	2019-026	bale	NA	72	0	BP	mlCOIintF+BR2	yes	1	bale	2	505
 12	Paramormyrops	P. kingsleyae mengono	P. kingsleyae BP	P. kingsleyae	2019-002	mengono	male	117	0	BP	mlCOIintF+BR2	no	1	mengono	2	12
 48	Paramormyrops	P. kingsleyae mengono	P. kingsleyae BP	P. kingsleyae	2019-002	mengono	male	103	2	BP	mlCOIintF+BR2	re-do	1	mengono	2	48
@@ -91,13 +92,13 @@ sampleid	genus	species_river	species_waveform	species	locality	river	sex	SL	para
 367	Paramormyrops	P. kingsleyae bambomo	P. kingsleyae BP	P. kingsleyae	2019-014	bambomo	male	69	0	BP	mlCOIintF+BR2	re-do	1	bambomo	2	367
 369	Paramormyrops	P. kingsleyae bambomo	P. kingsleyae BP	P. kingsleyae	2019-014	bambomo	female	75	0	BP	mlCOIintF+BR2	re-do	1	bambomo	2	369
 418	Paramormyrops	P. kingsleyae apassa	P. kingsleyae TP	P. kingsleyae	2019-021	apassa	juvenile	61	1	TP	mlCOIintF+BR2	re-do	1	apassa	2	418
-428	Mormyrops	Mormyrops zanchlirostris bale	Mormyrops zanchlirostris BP	Mormyrops zanchlirostris	2019-026	bale	female	160	NA	BP	mlCOIintF+BR2	re-do	1	bale	2	428
+428	Mormyrops	Mormyrops zanchlirostris bale	Mormyrops zanchlirostris BP	M. zanchlirostrus	2019-026	bale	female	160	NA	BP	mlCOIintF+BR2	re-do	1	bale	2	428
 436	Marcusenius	Marcusenius moori bale	Marcusenius moori BP	Marcusenius moori	2019-026	bale	female	110	NA	BP	mlCOIintF+BR2	no	1	bale	2	436
 443	Marcusenius	Marcusenius moori bale	Marcusenius moori BP	Marcusenius moori	2019-026	bale	juvenile	53	NA	BP	mlCOIintF+BR2	re-do	1	bale	2	443
 456	Paramormyrops	P. szaboi bale	P. szaboi TP	P. szaboi	2019-026	bale	female	78	0	TP	mlCOIintF+BR2	re-do	1	bale	2	456
 460	Paramormyrops	P. kingsleyae bale	P. kingsleyae TP	P. kingsleyae	2019-026	bale	juvenile	49	0	TP	mlCOIintF+BR2	re-do	1	bale	2	460
 462	Paramormyrops	P. tenuicauda bale	P. tenuicauda BP	P. tenuicauda	2019-026	bale	juvenile	51	NA	BP	mlCOIintF+BR2	re-do	1	bale	2	462
-508	Mormyrops	Mormyrops zanchlirostris bale	Mormyrops zanchlirostris BP	Mormyrops zanchlirostris	2019-026	bale	female	177	NA	BP	mlCOIintF+BR2	re-do	1	bale	2	508
+508	Mormyrops	Mormyrops zanchlirostris bale	Mormyrops zanchlirostris BP	M. zanchlirostrus	2019-026	bale	female	177	NA	BP	mlCOIintF+BR2	re-do	1	bale	2	508
 510	Paramormyrops	P. kingsleyae bale	P. kingsleyae TP	P. kingsleyae	2019-026	bale	juvenile	69	NA	TP	mlCOIintF+BR2	re-do	1	bale	2	510
 512	Marcusenius	Marcusenius moori bale	Marcusenius moori BP	Marcusenius moori	2019-026	bale	juvenile	73	NA	BP	mlCOIintF+BR2	re-do	1	bale	2	512
 546	Paramormyrops	P. kingsleyae bale	P. kingsleyae TP	P. kingsleyae	2019-026	bale	Male	88	NA	TP	mlCOIintF+BR2	no	1	bale	2	546
@@ -112,9 +113,9 @@ sampleid	genus	species_river	species_waveform	species	locality	river	sex	SL	para
 410	Paramormyrops	P. kingsleyae apassa	P. kingsleyae TP	P. kingsleyae	2019-021	apassa	female	84	1	TP	mlCOIintF+BR2	yes	2	apassa	2	410
 413	Paramormyrops	P. kingsleyae apassa	P. kingsleyae TP	P. kingsleyae	2019-021	apassa	juvenile	59	4	TP	mlCOIintF+BR2	yes	2	apassa	2	413
 416	Paramormyrops	P. kingsleyae apassa	P. kingsleyae TP	P. kingsleyae	2019-021	apassa	male	60	1	TP	mlCOIintF+BR2	yes	2	apassa	2	416
-429	Mormyrops	Mormyrops zanchlirostris bale	Mormyrops zanchlirostris BP	Mormyrops zanchlirostris	2019-026	bale	male	109	NA	BP	mlCOIintF+BR2	yes	2	bale	2	429
+429	Mormyrops	Mormyrops zanchlirostris bale	Mormyrops zanchlirostris BP	M. zanchlirostrus	2019-026	bale	male	109	NA	BP	mlCOIintF+BR2	yes	2	bale	2	429
 453	Paramormyrops	P. szaboi bale	P. szaboi TP	P. szaboi	2019-026	bale	juvenile	72	NA	TP	mlCOIintF+BR2	no	2	bale	2	453
-474	Mormyrops	Mormyrops zanchlirostris bale	Mormyrops zanchlirostris BP	Mormyrops zanchlirostris	2019-026	bale	male	129	0	BP	mlCOIintF+BR2	yes	2	bale	2	474
+474	Mormyrops	Mormyrops zanchlirostris bale	Mormyrops zanchlirostris BP	M. zanchlirostrus	2019-026	bale	male	129	0	BP	mlCOIintF+BR2	yes	2	bale	2	474
 482	Petrocephalus	Petrocephalus simus bale	Petrocephalus simus TP	Petrocephalus simus	2019-026	bale	juvenile	38	0	TP	mlCOIintF+BR2	yes	2	bale	2	482
 80	Paramormyrops	P. kingsleyae mengono	P. kingsleyae BP	P. kingsleyae	2019-002	mengono	male	115	0	BP	mlCOIintF+BR2	no	2	mengono	2	80
 90	Paramormyrops	P. kingsleyae mengono	P. kingsleyae BP	P. kingsleyae	2019-002	mengono	male	88	0	BP	mlCOIintF+BR2	no	2	mengono	2	90
@@ -139,22 +140,22 @@ sampleid	genus	species_river	species_waveform	species	locality	river	sex	SL	para
 219	Paramormyrops	P. ngounensis below_falls	P. ngounensis BP	P. ngounensis	2019-015	below_falls	NA	150	0	BP	mlCOIintF+BR2	yes	2	below_falls	2	219
 224	Paramormyrops	P. kingsleyae bambomo	P. kingsleyae BP	P. kingsleyae	2019-014	bambomo	female	85	0	BP	mlCOIintF+BR2	no	2	bambomo	2	224
 243	Mormyrops	Mormyrops nigricans above_falls	Mormyrops nigricans BP	Mormyrops nigricans	2019-019	above_falls	male	160	0	BP	mlCOIintF+BR2	yes	2	above_falls	2	243
-262	Mormyrops	Mormyrops zanchlirostris bengue	Mormyrops zanchlirostris BP	Mormyrops zanchlirostris	2019-020	bengue	male	78	0	BP	mlCOIintF+BR2	yes	2	bengue	2	262
+262	Mormyrops	Mormyrops zanchlirostris bengue	Mormyrops zanchlirostris BP	M. zanchlirostrus	2019-020	bengue	male	78	0	BP	mlCOIintF+BR2	yes	2	bengue	2	262
 362	Paramormyrops	P. kingsleyae bambomo	P. kingsleyae BP	P. kingsleyae	2019-014	bambomo	female	80	0	BP	mlCOIintF+BR2	yes	2	bambomo	2	362
 411	Paramormyrops	P. kingsleyae apassa	P. kingsleyae TP	P. kingsleyae	2019-021	apassa	male	96	0	TP	mlCOIintF+BR2	yes	2	apassa	2	411
 433	Paramormyrops	P. szaboi bale	P. szaboi TP	P. szaboi	2019-026	bale	female	92	0	TP	mlCOIintF+BR2	yes	2	bale	2	433
 434	Paramormyrops	P. szaboi bale	P. szaboi TP	P. szaboi	2019-026	bale	Male	92	NA	TP	mlCOIintF+BR2	yes	2	bale	2	434
 440	Marcusenius	Marcusenius moori bale	Marcusenius moori BP	Marcusenius moori	2019-026	bale	male	59	NA	BP	mlCOIintF+BR2	yes	2	bale	2	440
 464	Paramormyrops	P. magnostipes bale	P. magnostipes TP	P. magnostipes	2019-026	bale	NA	68	NA	TP	mlCOIintF+BR2	yes	2	bale	2	464
-472	Mormyrops	Mormyrops zanchlirostris bale	Mormyrops zanchlirostris BP	Mormyrops zanchlirostris	2019-026	bale	male	208	0	BP	mlCOIintF+BR2	yes	2	bale	2	472
+472	Mormyrops	Mormyrops zanchlirostris bale	Mormyrops zanchlirostris BP	M. zanchlirostrus	2019-026	bale	male	208	0	BP	mlCOIintF+BR2	yes	2	bale	2	472
 484	Petrocephalus	Petrocephalus simus bale	Petrocephalus simus TP	Petrocephalus simus	2019-026	bale	juvenile	36	0	TP	mlCOIintF+BR2	yes	2	bale	2	484
-507	Mormyrops	Mormyrops zanchlirostris bale	Mormyrops zanchlirostris BP	Mormyrops zanchlirostris	2019-026	bale	NA	90	NA	BP	mlCOIintF+BR2	no	2	bale	2	507
+507	Mormyrops	Mormyrops zanchlirostris bale	Mormyrops zanchlirostris BP	M. zanchlirostrus	2019-026	bale	NA	90	NA	BP	mlCOIintF+BR2	no	2	bale	2	507
 117	Paramormyrops	P. kingsleyae mengono	P. kingsleyae BP	P. kingsleyae	2019-002	mengono	male	95	0	BP	mlCOIintF+BR2	no	2	mengono	2	117
-430	Mormyrops	Mormyrops zanchlirostris bale	Mormyrops zanchlirostris BP	Mormyrops zanchlirostris	2019-026	bale	NA	183	NA	BP	mlCOIintF+BR2	yes	2	bale	2	430
+430	Mormyrops	Mormyrops zanchlirostris bale	Mormyrops zanchlirostris BP	M. zanchlirostrus	2019-026	bale	NA	183	NA	BP	mlCOIintF+BR2	yes	2	bale	2	430
 483	Petrocephalus	Petrocephalus simus bale	Petrocephalus simus TP	Petrocephalus simus	2019-026	bale	juvenile	36	0	TP	mlCOIintF+BR2	yes	2	bale	2	483
 62	Paramormyrops	P. kingsleyae iboundji	P. kingsleyae TP	P. kingsleyae	2019-001	iboundji	female	84	0	TP	mlCOIintF+BR2	yes	2	iboundji	2	62
 109	Paramormyrops	P. kingsleyae iboundji	P. kingsleyae TP	P. kingsleyae	2019-001	iboundji	female	86	0	TP	mlCOIintF+BR2	no	2	iboundji	2	109
-261	Mormyrops	Mormyrops zanchlirostris bengue	Mormyrops zanchlirostris BP	Mormyrops zanchlirostris	2019-020	bengue	male	99	0	BP	mlCOIintF+BR2	yes	2	bengue	2	261
+261	Mormyrops	Mormyrops zanchlirostris bengue	Mormyrops zanchlirostris BP	M. zanchlirostrus	2019-020	bengue	male	99	0	BP	mlCOIintF+BR2	yes	2	bengue	2	261
 278	Paramormyrops	P. kingsleyae apassa	P. kingsleyae TP	P. kingsleyae	2019-021	apassa	female	90	0	TP	mlCOIintF+BR2	yes	2	apassa	2	278
 279	Paramormyrops	P. kingsleyae apassa	P. kingsleyae TP	P. kingsleyae	2019-021	apassa	female	90	0	TP	mlCOIintF+BR2	yes	2	apassa	2	279
 321	Paramormyrops	P. kingsleyae bambomo	P. kingsleyae BP	P. kingsleyae	2019-014	bambomo	male	111	0	BP	mlCOIintF+BR2	yes	2	bambomo	2	321
@@ -162,7 +163,7 @@ sampleid	genus	species_river	species_waveform	species	locality	river	sex	SL	para
 415	Paramormyrops	P. kingsleyae apassa	P. kingsleyae TP	P. kingsleyae	2019-021	apassa	male	62	0	TP	mlCOIintF+BR2	yes	2	apassa	2	415
 457	Paramormyrops	P. szaboi bale	P. szaboi TP	P. szaboi	2019-026	bale	juvenile	70	0	TP	mlCOIintF+BR2	yes	2	bale	2	457
 458	Paramormyrops	P. szaboi bale	P. szaboi TP	P. szaboi	2019-026	bale	female	76	0	TP	mlCOIintF+BR2	yes	2	bale	2	458
-470	Mormyrops	Mormyrops zanchlirostris bale	Mormyrops zanchlirostris BP	Mormyrops zanchlirostris	2019-026	bale	male	131	0	BP	mlCOIintF+BR2	no	2	bale	2	470
+470	Mormyrops	Mormyrops zanchlirostris bale	Mormyrops zanchlirostris BP	M. zanchlirostrus	2019-026	bale	male	131	0	BP	mlCOIintF+BR2	no	2	bale	2	470
 524	Paramormyrops	P. kingsleyae bale	P. kingsleyae TP	P. kingsleyae	2019-029	bale	juvenile	46	NA	TP	mlCOIintF+BR2	yes	2	bale	2	524
 527	Paramormyrops	P. tenuicauda bale	P. tenuicauda BP	P. tenuicauda	2019-029	bale	juvenile	20	NA	BP	mlCOIintF+BR2	yes	2	bale	2	527
 61	Paramormyrops	P. kingsleyae iboundji	P. kingsleyae TP	P. kingsleyae	2019-001	iboundji	female	91	0	TP	mlCOIintF+BR2	no	2	iboundji	2	61

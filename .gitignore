@@ -1,3 +1,5 @@
 output_data/*
 input_data*
 *.sif
+*.Rhistory
+code/07_Analysis/old/*

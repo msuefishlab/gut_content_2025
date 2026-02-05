@@ -1,0 +1,109 @@
+#!/bin/bash --login
+#SBATCH --time=12:00:00
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=32GB
+#SBATCH --job-name blast_unassigned
+#SBATCH --output=%x-%j.out
+
+# SLURM script to BLAST unassigned ASVs against NCBI nt database
+#
+# Usage: sbatch --export=root=/path/to/repo,PRIMERSET=ps1 blast_unassigned_submit.sb
+#
+# Required environment variables:
+#   root: Path to repository root
+#   PRIMERSET: Either "ps1" or "ps2"
+
+cd ${SLURM_SUBMIT_DIR}
+
+# Load BLAST module
+module purge
+module load BLAST+/2.13.0
+
+# Set up directories
+BLAST_DIR="${root}/output_data/07_Analysis/blast_unassigned"
+SEQ_DIR="${BLAST_DIR}/sequences"
+RESULTS_DIR="${BLAST_DIR}/results"
+
+mkdir -p ${RESULTS_DIR}
+
+# Input and output files
+INPUT_FASTA="${SEQ_DIR}/${PRIMERSET}_unassigned_highAbund.fasta"
+OUTPUT_BLAST="${RESULTS_DIR}/${PRIMERSET}_blast_results.txt"
+OUTPUT_SUMMARY="${RESULTS_DIR}/${PRIMERSET}_blast_summary.tsv"
+
+echo "Starting BLAST analysis for ${PRIMERSET}"
+echo "Input: ${INPUT_FASTA}"
+echo "Output: ${OUTPUT_BLAST}"
+echo "CPUs: ${SLURM_CPUS_PER_TASK}"
+echo ""
+
+# Check if input file exists
+if [ ! -f "${INPUT_FASTA}" ]; then
+    echo "ERROR: Input file not found: ${INPUT_FASTA}"
+    echo "Please run blast_unassigned_asvs.sh first"
+    exit 1
+fi
+
+# Count sequences
+N_SEQS=$(grep -c "^>" ${INPUT_FASTA})
+echo "Number of sequences to BLAST: ${N_SEQS}"
+echo ""
+
+# Run BLASTN against nt database
+# Using megablast for fast, highly similar sequences
+# Output format 6 (tabular) with custom columns
+echo "Running BLASTN..."
+
+blastn \
+    -query ${INPUT_FASTA} \
+    -db /mnt/research/common-data/Bio/blastdb/v5/nt \
+    -out ${OUTPUT_BLAST} \
+    -outfmt "6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore staxids sscinames scomnames stitle" \
+    -max_target_seqs 10 \
+    -max_hsps 1 \
+    -num_threads ${SLURM_CPUS_PER_TASK} \
+    -evalue 1e-5
+
+echo ""
+echo "BLAST complete!"
+echo ""
+
+# Generate summary statistics using awk
+echo "Generating summary..."
+
+awk -F'\t' '
+BEGIN {
+    print "ASV\tReads\tTop_Hit_Species\tTop_Hit_Common\tPercent_Identity\tE_value\tBit_Score\tAlignment_Length\tTop_Hit_Title"
+}
+{
+    # Extract ASV ID and read count from query name (format: ASV|reads=N)
+    split($1, parts, "|")
+    asv = parts[1]
+    split(parts[2], reads_parts, "=")
+    reads = reads_parts[2]
+
+    # Track best hit per ASV (first hit is best due to sorting by bitscore)
+    if (!(asv in seen)) {
+        seen[asv] = 1
+        printf "%s\t%s\t%s\t%s\t%.2f\t%s\t%s\t%s\t%s\n",
+            asv, reads, $14, $15, $3, $11, $12, $4, $16
+    }
+}' ${OUTPUT_BLAST} > ${OUTPUT_SUMMARY}
+
+echo "Summary saved to: ${OUTPUT_SUMMARY}"
+echo ""
+
+# Count ASVs by taxonomic category
+echo "Top-level taxonomic breakdown:"
+awk -F'\t' 'NR>1 {print $3}' ${OUTPUT_SUMMARY} | \
+    sed 's/;.*//' | \
+    sort | uniq -c | sort -rn | head -20
+
+echo ""
+echo "Analysis complete!"
+echo ""
+echo "Files generated:"
+echo "  Full BLAST results: ${OUTPUT_BLAST}"
+echo "  Summary table: ${OUTPUT_SUMMARY}"

@@ -1,0 +1,4729 @@
+---
+title: "Mormyrid Gut Content Analysis: Dietary Niche Partitioning and EOD Waveform Polymorphism"
+author: "Gorsuch, Picq, Gallant"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    toc: true
+    latex_engine: xelatex
+    keep_tex: false
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    code_folding: hide
+    theme: flatly
+    df_print: paged
+header-includes:
+- \usepackage{longtable}
+- \usepackage{booktabs}
+- \usepackage{float}
+- \usepackage{array}
+- \usepackage{pdflscape}
+---
+
+# Overview
+
+This analysis examines dietary niche partitioning in mormyrid electric fishes across four hierarchical biological levels, with a focus on the relationship between EOD waveform polymorphism and diet in *Paramormyrops kingsleyae*.
+
+**Analytical Framework:**
+
+1. **LEVEL 1:** Mormyrid Community at Balé Creek (9 species, 35 individuals, single site)
+2. **LEVEL 2:** BP vs. TP Mormyrids Globally (~97-99 individuals across all sites)
+3. **LEVEL 3:** *P. kingsleyae* General Population Factors (~47 individuals from 4 rivers)
+4. **LEVEL 4:** BP vs. TP Within *P. kingsleyae* (The Core Question)
+5. **LEVEL 5:** Cross-Validation Across Primer Sets
+
+**Primer Sets:**
+
+| Set | Forward | Reverse | Name |
+|-----|---------|---------|------|
+| PS1 | mlCOIintF | BR2 | Primerset 1 |
+| PS2 | BF2 | BR1 | Primerset 2 |
+
+All analyses are conducted on both primer sets in parallel to ensure biological robustness.
+
+---
+
+```{r setup, include=FALSE}
+# Configure knitr
+knitr::opts_chunk$set(
+  echo = FALSE,
+  warning = FALSE,
+  message = FALSE,
+  fig.width = 7,   # or 8                                                                                                                                                   
+  fig.height = 4.5 ,# or 5   
+  dpi = 300
+)
+
+# Load required libraries
+library(tidyverse)      # Data manipulation and visualization
+library(qiime2R)        # QIIME2 data import
+library(phyloseq)       # Microbiome analysis framework
+library(microbiome)     # Microbiome utilities
+library(vegan)          # Ecological statistics
+library(pairwiseAdonis) # Pairwise PERMANOVA tests
+library(spaa)           # Diet overlap indices
+library(patchwork)      # Multi-panel figures
+library(knitr)          # Table formatting
+library(kableExtra)     # Enhanced tables
+library(ape)            # Phylogenetic analysis
+library(effsize)        # Effect size calculations
+library(stringdist)     # String distance calculations for fuzzy matching
+
+# Set seed for reproducibility
+set.seed(123)
+
+# Set root path
+root <- rprojroot::find_root(".git/index")
+
+# Source helper functions
+source(file.path(root, "code/07_Analysis/gut_analysis_2026_helpers.R"))
+
+# Color palettes (colorblind-friendly)
+# Waveform colors
+bp_color <- "#0072B2"      # Blue for BP
+tp_color <- "#D55E00"      # Orange for TP
+
+# Region colors
+north_color <- "#009E73"   # Green for North
+south_color <- "#CC79A7"   # Purple for South
+
+# Primer set colors
+ps1_color <- "#E69F00"     # Orange
+ps2_color <- "#56B4E9"     # Sky blue
+
+# Selectivity colors
+preference_color <- "#D55E00"   # Orange
+neutral_color <- "#F0E442"      # Yellow
+avoidance_color <- "#0072B2"    # Blue
+
+# Set global ggplot2 theme with sans-serif font and publication-quality sizes
+theme_set(theme_minimal(base_size = 12, base_family = "sans"))
+theme_update(
+  axis.title = element_text(size = 14, face = "bold"),
+  axis.text = element_text(size = 12),
+  legend.title = element_text(size = 12, face = "bold"),
+  legend.text = element_text(size = 11),
+  strip.text = element_text(size = 12, face = "bold"),
+  plot.title = element_text(size = 14, face = "bold")
+)
+```
+
+---
+
+# Data Loading and Preparation
+
+Load phyloseq objects for both primer sets, filter host sequences, and rarefy to common depth.
+
+```{r load-data}
+cat("=== LOADING PRIMER SET DATA ===\n\n")
+
+# Load both primer sets with host filtering
+ps1 <- load_primerset_data(1, use_no_host = TRUE)
+ps2 <- load_primerset_data(2, use_no_host = TRUE)
+
+cat("\n=== INITIAL DATASET SUMMARY ===\n")
+cat("Primer Set 1:", nsamples(ps1), "samples,", ntaxa(ps1), "ASVs\n")
+cat("Primer Set 2:", nsamples(ps2), "samples,", ntaxa(ps2), "ASVs\n")
+
+# Check rarefaction depths
+cat("\nRarefaction depths:\n")
+cat("  PS1:", unique(sample_sums(ps1)), "\n")
+cat("  PS2:", unique(sample_sums(ps2)), "\n")
+
+# Initialize global color palette for consistent family colors across all plots
+cat("\n=== CREATING GLOBAL COLOR PALETTE ===\n")
+GLOBAL_FAMILY_COLORS <- create_global_family_palette(ps1, ps2, min_families = 50)
+cat("Created color palette for", length(GLOBAL_FAMILY_COLORS) - 1, "families + Other\n")
+```
+
+## Sample Matching and Metadata Preparation
+
+```{r sample-matching}
+# Get sample names for both primer sets
+ps1_samples <- sample_data(ps1)$Sample_Name
+ps2_samples <- sample_data(ps2)$Sample_Name
+
+# Find shared samples
+shared_samples <- intersect(ps1_samples, ps2_samples)
+
+cat("=== SAMPLE OVERLAP ===\n")
+cat("PS1 total samples:", length(ps1_samples), "\n")
+cat("PS2 total samples:", length(ps2_samples), "\n")
+cat("Shared samples:", length(shared_samples), "\n")
+cat("Overlap proportion:",
+    round(length(shared_samples) / length(union(ps1_samples, ps2_samples)), 3), "\n")
+
+# Extract metadata (will be same for both after matching)
+meta_all <- data.frame(sample_data(ps1), stringsAsFactors = FALSE)
+
+# Create species-level scientific names
+meta_all$Species <- clean_species_name(meta_all$Species)
+
+# Display sample sizes by species and river
+sample_summary <- meta_all %>%
+  group_by(Species, Locality_Name) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  pivot_wider(names_from = Locality_Name, values_from = n, values_fill = list(n = 0)) %>%
+  mutate(Total = rowSums(select(., -Species))) %>%
+  bind_rows(
+    summarise(., across(where(is.numeric), sum), Species = "Total")
+  )
+
+kable(sample_summary,
+      caption = "Sample sizes by species and river",
+      align = c("l", rep("r", ncol(sample_summary) - 1)),
+      booktabs = TRUE) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"),
+                full_width = FALSE) %>%
+  row_spec(nrow(sample_summary), bold = TRUE)
+```
+
+## Create Subsets for Different Analytical Levels
+
+```{r create-subsets}
+cat("\n=== CREATING ANALYTICAL SUBSETS ===\n\n")
+
+# LEVEL 1: Balé Creek only (9 species)
+ps1_bale <- subset_samples(ps1, Locality_Name == "Bale Creek")
+ps2_bale <- subset_samples(ps2, Locality_Name == "Bale Creek")
+
+# Remove rare taxa (present in <2 samples or <10 total reads)
+ps1_bale <- filter_taxa(ps1_bale, function(x) sum(x > 0) >= 2 & sum(x) >= 10, TRUE)
+ps2_bale <- filter_taxa(ps2_bale, function(x) sum(x > 0) >= 2 & sum(x) >= 10, TRUE)
+
+cat("LEVEL 1 - Balé Creek:\n")
+cat("  PS1:", nsamples(ps1_bale), "samples,", ntaxa(ps1_bale), "ASVs\n")
+cat("  PS2:", nsamples(ps2_bale), "samples,", ntaxa(ps2_bale), "ASVs\n")
+
+# LEVEL 2: All mormyrids (BP vs TP globally)
+ps1_all_mormyrids <- ps1
+ps2_all_mormyrids <- ps2
+
+# Add waveform type metadata (BP or TP)
+# Note: This assumes Waveform_Type column exists in metadata
+cat("\nLEVEL 2 - All Mormyrids (BP vs TP):\n")
+cat("  PS1:", nsamples(ps1_all_mormyrids), "samples\n")
+cat("  PS2:", nsamples(ps2_all_mormyrids), "samples\n")
+
+waveform_counts <- table(sample_data(ps1)$Waveform_Type)
+cat("  BP samples:", waveform_counts["BP"], "\n")
+cat("  TP samples:", waveform_counts["TP"], "\n")
+
+# LEVEL 3 & 4: P. kingsleyae only
+ps1_pk <- subset_samples(ps1, Species == "Paramormyrops kingsleyae")
+ps2_pk <- subset_samples(ps2, Species == "Paramormyrops kingsleyae")
+
+# Remove rare taxa
+ps1_pk <- filter_taxa(ps1_pk, function(x) sum(x > 0) >= 2 & sum(x) >= 10, TRUE)
+ps2_pk <- filter_taxa(ps2_pk, function(x) sum(x > 0) >= 2 & sum(x) >= 10, TRUE)
+
+cat("\nLEVEL 3/4 - P. kingsleyae:\n")
+cat("  PS1:", nsamples(ps1_pk), "samples,", ntaxa(ps1_pk), "ASVs\n")
+cat("  PS2:", nsamples(ps2_pk), "samples,", ntaxa(ps2_pk), "ASVs\n")
+
+# Check P. kingsleyae sampling design
+pk_meta <- data.frame(sample_data(ps1_pk))
+pk_design <- pk_meta %>%
+  group_by(Locality_Name, Waveform_Type) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  pivot_wider(names_from = Waveform_Type, values_from = n, values_fill = list(n = 0))
+
+cat("\nP. kingsleyae sampling design:\n")
+print(pk_design)
+```
+
+## Load Phylogenetic Data
+
+```{r load-phylogeny}
+cat("\n=== LOADING PHYLOGENETIC DATA ===\n\n")
+
+# Load phylogenetic tree
+tree_file <- file.path(root, "input_data/ssAll_iqtree_timtree.tree")
+
+if (file.exists(tree_file)) {
+  # Read tree - NEXUS format may create multiple trees, extract the real one
+  phylo_tree_raw <- read.tree(tree_file)
+
+  # If multiPhylo object, extract the second tree (the actual phylogeny)
+  if (inherits(phylo_tree_raw, "multiPhylo")) {
+    phylo_tree <- phylo_tree_raw[[2]]
+    cat("Note: NEXUS file contained", length(phylo_tree_raw),
+        "trees, extracted tree 2\n\n")
+  } else {
+    phylo_tree <- phylo_tree_raw
+  }
+
+  cat("Phylogenetic tree loaded:\n")
+  cat("  Tips:", length(phylo_tree$tip.label), "\n")
+  cat("  Tree type:", ifelse(is.ultrametric(phylo_tree), "Ultrametric",
+                              "Non-ultrametric"), "\n")
+
+  # Create cophenetic distance matrix
+  phylo_dist <- cophenetic(phylo_tree)
+
+  cat("\nPhylogenetic distances computed\n")
+  cat("  Dimensions:", dim(phylo_dist)[1], "x", dim(phylo_dist)[2], "\n")
+
+  # Show relevant tree tips for debugging
+  cat("\nRelevant tree tips by genus:\n")
+  param_tips <- grep("Paramormyrops", phylo_tree$tip.label, value = TRUE)
+  morm_tips <- grep("^Mormyrops", phylo_tree$tip.label, value = TRUE)
+  marc_tips <- grep("Marcusenius", phylo_tree$tip.label, value = TRUE)
+  petro_tips <- grep("Petrocephalus", phylo_tree$tip.label, value = TRUE)
+
+  cat("\nParamormyrops (", length(param_tips), " tips):\n", sep = "")
+  cat(paste(param_tips, collapse = "\n"), "\n")
+
+  cat("\nMormyrops (", length(morm_tips), " tips):\n", sep = "")
+  cat(paste(morm_tips, collapse = "\n"), "\n")
+
+  cat("\nMarcusenius (", length(marc_tips), " tips):\n", sep = "")
+  cat(paste(marc_tips, collapse = "\n"), "\n")
+
+  cat("\nPetrocephalus (", length(petro_tips), " tips, showing first 5):\n", sep = "")
+  cat(paste(head(petro_tips, 5), collapse = "\n"), "\n")
+
+  # Fuzzy match Balé species to phylogeny
+  match_results <- match_bale_species_to_phylogeny(ps1_bale, phylo_tree)
+
+  cat("\nBalé Creek species matching:\n")
+  cat("  Successfully matched:", match_results$n_matched, "/", match_results$n_species, "\n\n")
+
+  # Print detailed results
+  print(match_results$match_table)
+
+  # Extract matched tips for downstream use
+  matched_tips <- match_results$matched_species
+  if (length(matched_tips) > 0) {
+    phylo_dist_bale <- phylo_dist[matched_tips, matched_tips]
+  }
+
+} else {
+  cat("WARNING: Phylogenetic tree file not found at:\n")
+  cat("  ", tree_file, "\n")
+  phylo_tree <- NULL
+  phylo_dist <- NULL
+}
+```
+
+## Helper Functions
+
+Additional helper functions specific to this analysis.
+
+```{r additional-helpers}
+#' Aggregate phyloseq object to family level
+#'
+#' @param ps phyloseq object
+#' @return phyloseq object aggregated to family level
+aggregate_to_family <- function(ps) {
+  ps_family <- tax_glom(ps, taxrank = "Family", NArm = FALSE)
+  return(ps_family)
+}
+
+
+#' Create stacked bar chart of prey composition at family level
+#'
+#' @param ps phyloseq object (should be aggregated to family level)
+#' @param group_var Character, grouping variable for x-axis
+#' @param top_n Integer, number of top families to show (rest as "Other")
+#' @param title Character, plot title
+#' @return ggplot object
+plot_composition_bars <- function(ps, group_var, top_n = 10, title = "") {
+
+  # Melt to long format (before normalization)
+  ps_melt <- psmelt(ps)
+
+  # Clean family names
+  ps_melt$Family_clean <- sapply(ps_melt$Family, clean_family_name)
+
+  # Aggregate by group_var and Family, summing counts
+  ps_agg <- ps_melt %>%
+    group_by(.data[[group_var]], Family_clean) %>%
+    summarise(Abundance = sum(Abundance), .groups = "drop")
+
+  # Normalize within each group to get relative abundance
+  ps_agg <- ps_agg %>%
+    group_by(.data[[group_var]]) %>%
+    mutate(RelAbund = Abundance / sum(Abundance)) %>%
+    ungroup()
+
+  # Identify top N families by mean relative abundance across groups
+  top_families <- ps_agg %>%
+    group_by(Family_clean) %>%
+    summarise(mean_abund = mean(RelAbund), .groups = "drop") %>%
+    arrange(desc(mean_abund)) %>%
+    slice_head(n = top_n) %>%
+    pull(Family_clean)
+
+  # Categorize families and aggregate "Other"
+  ps_final <- ps_agg %>%
+    mutate(Family_display = ifelse(Family_clean %in% top_families,
+                                   Family_clean, "Other")) %>%
+    group_by(.data[[group_var]], Family_display) %>%
+    summarise(RelAbund = sum(RelAbund), .groups = "drop")
+
+  # Reorder for plotting (top families first, then Other)
+  ps_final$Family_display <- factor(ps_final$Family_display,
+                                     levels = c(top_families, "Other"))
+
+  # Create plot with consistent color scale
+  p <- ggplot(ps_final, aes(x = .data[[group_var]], y = RelAbund,
+                            fill = Family_display)) +
+    geom_bar(stat = "identity", position = "stack") +
+    scale_fill_manual(values = GLOBAL_FAMILY_COLORS,
+                      name = "Prey Family",
+                      na.value = "#808080",
+                      drop = FALSE) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1),
+          legend.position = "bottom",
+          legend.key.size = unit(0.35, "cm"),
+          legend.box = "vertical") +
+    guides(fill = guide_legend(ncol = 4, title.position = "top",
+                               byrow = TRUE, nrow = 3)) +
+    labs(title = title, x = group_var, y = "Relative Abundance") +
+    scale_y_continuous(labels = scales::percent)
+
+  return(p)
+}
+
+
+#' Variance partitioning for PERMANOVA
+#'
+#' @param beta_result Beta diversity result from run_beta_diversity_analysis()
+#' @param var1_formula Character, formula for first variable (e.g., "~ Region")
+#' @param var2_formula Character, formula for second variable (e.g., "~ Waveform_Type")
+#' @return List with varpart result and sequential PERMANOVA results
+variance_partition_permanova <- function(beta_result, var1_formula, var2_formula) {
+
+  dist_mat <- beta_result$distance
+  meta <- beta_result$metadata
+
+  # Method 1: varpart
+  varpart_result <- varpart(dist_mat,
+                            as.formula(var1_formula),
+                            as.formula(var2_formula),
+                            data = meta)
+
+  # Method 2: Sequential PERMANOVA (variable 1 first)
+  formula_seq1 <- paste("dist_mat", var1_formula, "+",
+                       gsub("~\\s*", "", var2_formula))
+  perm_seq1 <- adonis2(as.formula(formula_seq1),
+                      data = meta, permutations = 999, by = "terms")
+
+  # Method 3: Sequential PERMANOVA (variable 2 first)
+  formula_seq2 <- paste("dist_mat", var2_formula, "+",
+                       gsub("~\\s*", "", var1_formula))
+  perm_seq2 <- adonis2(as.formula(formula_seq2),
+                      data = meta, permutations = 999, by = "terms")
+
+  # Method 4: Marginal effects
+  formula_marginal <- paste("dist_mat", var1_formula, "+",
+                           gsub("~\\s*", "", var2_formula))
+  perm_marginal <- adonis2(as.formula(formula_marginal),
+                          data = meta, permutations = 999, by = "margin")
+
+  return(list(
+    varpart = varpart_result,
+    sequential_var1_first = perm_seq1,
+    sequential_var2_first = perm_seq2,
+    marginal = perm_marginal
+  ))
+}
+
+
+#' Calculate diet overlap using Schoener and Pianka indices
+#'
+#' @param ps phyloseq object
+#' @param group_var Character, grouping variable (e.g., "Species")
+#' @return List with Schoener and Pianka matrices
+calculate_diet_overlap <- function(ps, group_var) {
+
+  # Convert to relative abundance
+  ps_rel <- transform_sample_counts(ps, function(x) x / sum(x))
+
+  # Get OTU table (taxa as rows, samples as columns)
+  otu_mat <- as.matrix(otu_table(ps_rel))
+  if (!taxa_are_rows(ps_rel)) {
+    otu_mat <- t(otu_mat)
+  }
+
+  # Get metadata
+  meta <- data.frame(sample_data(ps_rel))
+
+  # Calculate mean abundance per group
+  groups <- unique(meta[[group_var]])
+  mean_abundances <- matrix(0, nrow = ntaxa(ps_rel), ncol = length(groups))
+  rownames(mean_abundances) <- taxa_names(ps_rel)
+  colnames(mean_abundances) <- groups
+
+  for (g in groups) {
+    samples_in_group <- rownames(meta)[meta[[group_var]] == g]
+    if (length(samples_in_group) == 1) {
+      mean_abundances[, g] <- otu_mat[, samples_in_group]
+    } else {
+      mean_abundances[, g] <- rowMeans(otu_mat[, samples_in_group, drop = FALSE])
+    }
+  }
+
+  # Transpose for spaa package (expects species as columns, sites/groups as rows)
+  mean_abundances_t <- t(mean_abundances)
+
+  # Calculate overlap indices
+  schoener <- niche.overlap(mean_abundances_t, method = "schoener")
+  pianka <- niche.overlap(mean_abundances_t, method = "pianka")
+
+  return(list(
+    schoener = schoener,
+    pianka = pianka,
+    mean_abundances = mean_abundances
+  ))
+}
+```
+
+---
+
+# PRIMER SET CONCORDANCE ANALYSIS
+
+## Overview
+
+This section quantifies concordance between PS1 and PS2 on shared samples to address concerns about primer effects in metabarcoding. Esnaola et al. (2018) found primer choice explained R² = 0.353 of variation in fish diet - nearly twice the study site effect. We test whether our primers show similar effects when applied to identical biological samples.
+
+```{r primer-concordance-setup}
+cat("\n=== PRIMER SET CONCORDANCE ANALYSIS ===\n\n")
+
+# Subset to shared samples only (fair comparison)
+ps1_shared <- subset_samples(ps1, Sample_Name %in% shared_samples)
+ps2_shared <- subset_samples(ps2, Sample_Name %in% shared_samples)
+
+# Remove absent taxa
+ps1_shared <- prune_taxa(taxa_sums(ps1_shared) > 0, ps1_shared)
+ps2_shared <- prune_taxa(taxa_sums(ps2_shared) > 0, ps2_shared)
+
+cat(sprintf("Shared samples: n = %d\n", length(shared_samples)))
+cat(sprintf("PS1 taxa after pruning: %d\n", ntaxa(ps1_shared)))
+cat(sprintf("PS2 taxa after pruning: %d\n", ntaxa(ps2_shared)))
+```
+
+```{r primer-beta-diversity}
+cat("\n=== Beta Diversity Analysis (Species Effect) ===\n\n")
+
+# PS1
+beta1_shared <- run_beta_diversity_analysis(ps1_shared, "~ Species")
+species_r2_ps1 <- beta1_shared$permanova$R2[1]
+species_p_ps1 <- beta1_shared$permanova$`Pr(>F)`[1]
+
+cat(sprintf("PS1 - Species R²: %.3f (p = %s)\n",
+            species_r2_ps1, format.pval(species_p_ps1, digits = 3)))
+
+# PS2
+beta2_shared <- run_beta_diversity_analysis(ps2_shared, "~ Species")
+species_r2_ps2 <- beta2_shared$permanova$R2[1]
+species_p_ps2 <- beta2_shared$permanova$`Pr(>F)`[1]
+
+cat(sprintf("PS2 - Species R²: %.3f (p = %s)\n",
+            species_r2_ps2, format.pval(species_p_ps2, digits = 3)))
+
+mean_r2 <- mean(c(species_r2_ps1, species_r2_ps2))
+cat(sprintf("\nMean Species R²: %.3f\n", mean_r2))
+cat(sprintf("Esnaola primer effect threshold: 0.353\n"))
+```
+
+```{r primer-concordance-tests}
+cat("\n=== Concordance Tests ===\n\n")
+
+# Ensure samples match by Sample_Name (not SampleID)
+# Convert distance matrices to matrices with Sample_Name labels
+dist1_mat <- as.matrix(beta1_shared$distance)
+dist2_mat <- as.matrix(beta2_shared$distance)
+
+# Relabel with Sample_Names from metadata
+rownames(dist1_mat) <- beta1_shared$metadata$Sample_Name
+colnames(dist1_mat) <- beta1_shared$metadata$Sample_Name
+rownames(dist2_mat) <- beta2_shared$metadata$Sample_Name
+colnames(dist2_mat) <- beta2_shared$metadata$Sample_Name
+
+# Find truly shared samples and subset (automatically aligned by name)
+shared_check <- intersect(beta1_shared$metadata$Sample_Name,
+                          beta2_shared$metadata$Sample_Name)
+cat(sprintf("Samples matched by Sample_Name: %d\n", length(shared_check)))
+
+dist1_aligned <- as.dist(dist1_mat[shared_check, shared_check])
+dist2_aligned <- as.dist(dist2_mat[shared_check, shared_check])
+
+# Mantel test - correlation between distance matrices
+mantel_result <- run_mantel_test(dist1_aligned, dist2_aligned)
+cat(sprintf("Mantel correlation: r = %.3f (p = %s)\n",
+            mantel_result$statistic,
+            format.pval(mantel_result$signif, digits = 3)))
+
+# For Procrustes, also need to align PCoA coordinates by Sample_Name
+pcoa1_mat <- beta1_shared$pcoa$points
+pcoa2_mat <- beta2_shared$pcoa$points
+rownames(pcoa1_mat) <- beta1_shared$metadata$Sample_Name
+rownames(pcoa2_mat) <- beta2_shared$metadata$Sample_Name
+
+# Subset and reorder to match
+pcoa1_aligned <- pcoa1_mat[shared_check, ]
+pcoa2_aligned <- pcoa2_mat[shared_check, ]
+
+# Procrustes analysis - ordination congruence
+library(vegan)
+pro <- procrustes(pcoa1_aligned, pcoa2_aligned, symmetric = TRUE)
+pro_test <- protest(pcoa1_aligned, pcoa2_aligned, permutations = 999)
+
+# pro_test$t0 IS the correlation, not m²
+pro_cor <- pro_test$t0  # correlation directly from protest()
+pro_m2 <- 1 - pro_test$t0^2  # calculate m² from correlation
+
+cat(sprintf("Procrustes correlation: %.3f (higher = better concordance, p = %s)\n",
+            pro_cor, format.pval(pro_test$signif, digits = 3)))
+cat(sprintf("Procrustes m²: %.4f (lower = better fit)\n",
+            pro_m2))
+
+cat("\n=== Primer Set Effect Size (PERMANOVA) ===\n\n")
+
+# Create merged dataset to test Primer_Set effect
+# Merge OTU tables (union of all taxa, filling zeros where absent)
+otu1 <- as.matrix(otu_table(ps1_shared))
+otu2 <- as.matrix(otu_table(ps2_shared))
+
+# Get union of all taxa
+all_taxa <- union(rownames(otu1), rownames(otu2))
+
+# Create full matrices with zeros for missing taxa
+otu1_full <- matrix(0, nrow = length(all_taxa), ncol = ncol(otu1))
+rownames(otu1_full) <- all_taxa
+colnames(otu1_full) <- colnames(otu1)
+otu1_full[rownames(otu1), ] <- otu1
+
+otu2_full <- matrix(0, nrow = length(all_taxa), ncol = ncol(otu2))
+rownames(otu2_full) <- all_taxa
+colnames(otu2_full) <- colnames(otu2)
+otu2_full[rownames(otu2), ] <- otu2
+
+# Relabel samples with Sample_Name and add PS suffix for uniqueness
+meta1 <- beta1_shared$metadata[match(colnames(otu1), rownames(beta1_shared$metadata)), ]
+meta2 <- beta2_shared$metadata[match(colnames(otu2), rownames(beta2_shared$metadata)), ]
+
+colnames(otu1_full) <- paste0(meta1$Sample_Name, "_PS1")
+colnames(otu2_full) <- paste0(meta2$Sample_Name, "_PS2")
+
+# Combine OTU tables
+otu_combined <- cbind(otu1_full, otu2_full)
+
+# Create combined metadata
+meta1$SampleID_new <- paste0(meta1$Sample_Name, "_PS1")
+meta1$Primer_Set <- "PS1"
+meta2$SampleID_new <- paste0(meta2$Sample_Name, "_PS2")
+meta2$Primer_Set <- "PS2"
+
+meta_combined <- rbind(meta1, meta2)
+rownames(meta_combined) <- meta_combined$SampleID_new
+
+# Transpose for vegan (samples as rows)
+otu_combined_t <- t(otu_combined)
+
+# Calculate distance and run PERMANOVA
+dist_combined <- vegdist(otu_combined_t, method = "bray")
+
+# Test Primer_Set effect (controlling for Species)
+perm_primer <- adonis2(dist_combined ~ Primer_Set + Species,
+                       data = meta_combined,
+                       permutations = 999)
+
+primer_r2 <- perm_primer$R2[1]
+primer_p <- perm_primer$`Pr(>F)`[1]
+
+cat(sprintf("Unstratified PERMANOVA:\n"))
+cat(sprintf("Primer_Set R²: %.3f (p = %s)\n",
+            primer_r2, format.pval(primer_p, digits = 3)))
+cat(sprintf("Esnaola et al. primer effect: R² = 0.353\n"))
+cat(sprintf("Our primer effect: %.1f%% of Esnaola's\n\n",
+            (primer_r2 / 0.353) * 100))
+
+# Stratified PERMANOVA - accounts for paired samples (same fish, both primers)
+perm_primer_strata <- adonis2(dist_combined ~ Primer_Set,
+                               data = meta_combined,
+                               strata = meta_combined$Sample_Name,
+                               permutations = 999)
+
+primer_r2_strata <- perm_primer_strata$R2[1]
+primer_p_strata <- perm_primer_strata$`Pr(>F)`[1]
+
+cat(sprintf("Stratified by Sample (paired design):\n"))
+cat(sprintf("Primer_Set R²: %.3f (p = %s)\n",
+            primer_r2_strata, format.pval(primer_p_strata, digits = 3)))
+cat(sprintf("Esnaola comparison: %.1f%% of their primer effect\n",
+            (primer_r2_strata / 0.353) * 100))
+```
+
+```{r primer-pcoa-plots, fig.width=12, fig.height=6}
+# Use aligned coordinates that match by Sample_Name
+pcoa1_df <- data.frame(
+  PC1 = pcoa1_aligned[, 1],
+  PC2 = pcoa1_aligned[, 2],
+  Sample_Name = rownames(pcoa1_aligned),
+  Primer_Set = "PS1"
+)
+
+pcoa2_df <- data.frame(
+  PC1 = pcoa2_aligned[, 1],
+  PC2 = pcoa2_aligned[, 2],
+  Sample_Name = rownames(pcoa2_aligned),
+  Primer_Set = "PS2"
+)
+
+# Add Species labels from metadata
+meta_shared <- beta1_shared$metadata %>%
+  filter(Sample_Name %in% shared_check) %>%
+  select(Sample_Name, Species)
+
+pcoa1_df <- merge(pcoa1_df, meta_shared, by = "Sample_Name")
+pcoa2_df <- merge(pcoa2_df, meta_shared, by = "Sample_Name")
+
+pcoa_combined <- rbind(pcoa1_df, pcoa2_df)
+
+# Create faceted plot
+ggplot(pcoa_combined, aes(x = PC1, y = PC2, color = Species)) +
+  geom_point(size = 3, alpha = 0.7) +
+  facet_wrap(~ Primer_Set) +
+  theme_minimal() +
+  labs(title = "Beta Diversity: Comparing Primer Sets on Shared Samples",
+       subtitle = sprintf("Mantel r = %.3f | PS1 R² = %.3f | PS2 R² = %.3f",
+                          mantel_result$statistic, species_r2_ps1, species_r2_ps2)) +
+  coord_fixed()
+```
+
+```{r primer-procrustes-plot, fig.width=8, fig.height=8}
+# Extract transformed coordinates (pro object already uses aligned matrices)
+coords_ps1 <- data.frame(pro$X)
+coords_ps2 <- data.frame(pro$Yrot)
+
+# Create plot dataframe with proper column names
+plot_df <- data.frame(
+  x1 = coords_ps1[, 1],
+  y1 = coords_ps1[, 2],
+  x2 = coords_ps2[, 1],
+  y2 = coords_ps2[, 2]
+)
+
+ggplot(plot_df) +
+  geom_segment(aes(x = x1, y = y1, xend = x2, yend = y2),
+               arrow = arrow(length = unit(0.1, "cm")),
+               alpha = 0.3, color = "gray50") +
+  geom_point(aes(x = x1, y = y1),
+             color = "#2C7BB6", size = 3, alpha = 0.6, shape = 16) +
+  geom_point(aes(x = x2, y = y2),
+             color = "#D7191C", size = 3, alpha = 0.6, shape = 17) +
+  theme_minimal() +
+  labs(title = "Procrustes Superimposition: PS1 (circles) vs PS2 (triangles)",
+       subtitle = sprintf(
+         "Correlation = %.3f (higher = better) | m² = %.4f (lower = better) | p = %.3f",
+         pro_cor, pro_m2, pro_test$signif)) +
+  coord_fixed()
+```
+
+```{r primer-effect-comparison, fig.width=8, fig.height=5}
+r2_comparison <- data.frame(
+  Factor = c("Species (PS1)", "Species (PS2)",
+             "This Study: Primer Effect (unstratified)",
+             "This Study: Primer Effect (stratified)",
+             "Esnaola: Primer Effect", "Esnaola: Study Site"),
+  R2 = c(species_r2_ps1, species_r2_ps2, primer_r2, primer_r2_strata,
+         0.353, 0.184),
+  Study = c("This Study", "This Study", "This Study", "This Study",
+            "Esnaola 2018", "Esnaola 2018"),
+  Type = c("Biological", "Biological", "Technical", "Technical",
+           "Technical", "Biological")
+)
+
+ggplot(r2_comparison, aes(x = reorder(Factor, R2), y = R2, fill = Type)) +
+  geom_col() +
+  geom_hline(yintercept = 0.353, linetype = "dashed", color = "red",
+             linewidth = 1) +
+  annotate("text", x = 2.5, y = 0.37, label = "Esnaola primer threshold",
+           size = 3, color = "red") +
+  coord_flip() +
+  theme_minimal() +
+  labs(title = "Effect Sizes: Biological vs Technical Variation",
+       subtitle = sprintf("Our primer effect (R²=%.3f) is %.0f%% of Esnaola's",
+                          primer_r2, (primer_r2/0.353)*100),
+       x = "", y = "R² (Proportion of Variation Explained)") +
+  scale_fill_manual(values = c("Biological" = "#2C7BB6",
+                                "Technical" = "#D7191C"))
+```
+
+```{r primer-stats-table}
+primer_stats <- data.frame(
+  Metric = c(
+    "Shared Samples (n)",
+    "PS1: Species R²",
+    "PS1: Species p-value",
+    "PS2: Species R²",
+    "PS2: Species p-value",
+    "Mean Species R²",
+    "Primer Effect R² (unstratified)",
+    "Primer Effect p-value (unstratified)",
+    "Primer Effect R² (stratified)",
+    "Primer Effect p-value (stratified)",
+    "Mantel correlation (r)",
+    "Mantel p-value",
+    "Procrustes correlation (high = good)",
+    "Procrustes m² (low = good)",
+    "Procrustes p-value"
+  ),
+  Value = c(
+    length(shared_samples),
+    round(species_r2_ps1, 3),
+    format.pval(species_p_ps1, digits = 3),
+    round(species_r2_ps2, 3),
+    format.pval(species_p_ps2, digits = 3),
+    round(mean(c(species_r2_ps1, species_r2_ps2)), 3),
+    round(primer_r2, 3),
+    format.pval(primer_p, digits = 3),
+    round(primer_r2_strata, 3),
+    format.pval(primer_p_strata, digits = 3),
+    round(mantel_result$statistic, 3),
+    format.pval(mantel_result$signif, digits = 3),
+    round(pro_cor, 3),
+    round(pro_m2, 4),
+    format.pval(pro_test$signif, digits = 3)
+  )
+)
+
+kable(primer_stats, caption = "Primer Set Concordance Statistics") %>%
+  kable_styling(bootstrap_options = c("striped", "condensed"))
+```
+
+## Compositional Differences vs. Variation Explained
+
+### Conceptual Framework
+
+Before interpreting the results, it's critical to distinguish between two related but
+distinct concepts:
+
+1. **Compositional differences (univariate)**: Taxon-specific absolute shifts in
+   relative abundance between primer sets (e.g., "Hydroptilidae is 321× more abundant
+   in PS1 than PS2"). Measured as fold-change ratios for individual taxa.
+
+2. **Compositional variation explained (multivariate)**: The proportion of
+   sample-to-sample variation in community composition attributable to primer choice
+   (R² from PERMANOVA). Measures how much primers *differentially* affect samples.
+
+**Why these can diverge:** If all samples experience the same absolute shift
+(e.g., all samples show 10× more Hydroptilidae in PS1), the fold-change is huge
+(10×) but the R² is low because the primer doesn't change the *relative differences*
+between samples—the ecological structure (which samples are similar/different) is
+preserved. The primers shift all samples in parallel, maintaining beta diversity
+patterns.
+
+Conversely, high R² with moderate fold-changes indicates that primers *differentially*
+affect samples (Sample A shifts one way, Sample B shifts another), disrupting the
+ecological signal.
+
+```{r taxon-fold-changes}
+cat("\n=== Taxon-Specific Compositional Differences ===\n\n")
+
+# Calculate mean relative abundance by family for each primer set
+# Transform to relative abundance
+ps1_rel <- transform_sample_counts(ps1_shared, function(x) x / sum(x) * 100)
+ps2_rel <- transform_sample_counts(ps2_shared, function(x) x / sum(x) * 100)
+
+# Aggregate by family and calculate mean across all samples
+ps1_family <- tax_glom(ps1_rel, taxrank = "Family", NArm = FALSE)
+ps2_family <- tax_glom(ps2_rel, taxrank = "Family", NArm = FALSE)
+
+# Get mean abundance per family
+ps1_means <- apply(otu_table(ps1_family), 1, mean)
+ps2_means <- apply(otu_table(ps2_family), 1, mean)
+
+# Get family names
+ps1_tax <- tax_table(ps1_family)[, "Family"]
+ps2_tax <- tax_table(ps2_family)[, "Family"]
+
+# Create dataframes
+ps1_df <- data.frame(
+  Family = as.character(ps1_tax),
+  PS1_mean_pct = ps1_means,
+  stringsAsFactors = FALSE
+)
+
+ps2_df <- data.frame(
+  Family = as.character(ps2_tax),
+  PS2_mean_pct = ps2_means,
+  stringsAsFactors = FALSE
+)
+
+# Merge and calculate fold-changes
+fc_data <- merge(ps1_df, ps2_df, by = "Family", all = TRUE)
+fc_data$PS1_mean_pct[is.na(fc_data$PS1_mean_pct)] <- 0.001  # pseudocount
+fc_data$PS2_mean_pct[is.na(fc_data$PS2_mean_pct)] <- 0.001  # pseudocount
+
+fc_data$fold_change <- fc_data$PS1_mean_pct / fc_data$PS2_mean_pct
+fc_data$log2_fc <- log2(fc_data$fold_change)
+fc_data$abs_log2_fc <- abs(fc_data$log2_fc)
+
+# Sort by absolute fold-change
+fc_data <- fc_data[order(-fc_data$abs_log2_fc), ]
+
+# Get top 10 families by abundance
+top_families <- fc_data %>%
+  mutate(max_abundance = pmax(PS1_mean_pct, PS2_mean_pct)) %>%
+  arrange(desc(max_abundance)) %>%
+  head(10)
+
+cat(sprintf("Maximum fold-change observed: %.1f× (%s)\n",
+            fc_data$fold_change[1], fc_data$Family[1]))
+cat(sprintf("Number of families with >10× difference: %d\n",
+            sum(fc_data$fold_change > 10 | fc_data$fold_change < 0.1)))
+cat(sprintf("\n#### Top 10 most abundant families (fold-change = PS1/PS2):\n\n"))
+kable(top_families[, c("Family", "PS1_mean_pct", "PS2_mean_pct",
+                             "fold_change")],
+            digits = c(0, 2, 2, 1),
+            col.names = c("Family", "PS1 Mean %", "PS2 Mean %",
+                          "Fold-Change"),
+            caption = "Compositional Differences: Top 10 Families",
+            booktabs = TRUE) %>%
+      kable_styling(latex_options = c("striped", "HOLD_position"),
+                    bootstrap_options = c("striped", "condensed"),
+                    full_width = FALSE, font_size = 9)
+```
+
+```{r fold-change-plot, fig.width=10, fig.height=6}
+# Create visualization showing fold-changes for top families
+top_families_plot <- top_families %>%
+  mutate(
+    Direction = ifelse(fold_change > 1, "Higher in PS1", "Higher in PS2"),
+    Family_label = paste0(Family, " (", round(fold_change, 1), "×)")
+  )
+
+ggplot(top_families_plot,
+       aes(x = reorder(Family, abs_log2_fc), y = log2_fc, fill = Direction)) +
+  geom_col() +
+  geom_hline(yintercept = 0, linetype = "solid", color = "black") +
+  geom_hline(yintercept = c(-1, 1), linetype = "dashed", color = "gray50",
+             alpha = 0.5) +
+  coord_flip() +
+  theme_minimal() +
+  labs(
+    title = "Taxon-Specific Compositional Differences Between Primer Sets",
+    subtitle = sprintf(
+      "Top 10 families by abundance | Max fold-change: %.1f× | Primer R² = %.3f",
+      fc_data$fold_change[1], primer_r2_strata
+    ),
+    x = "Family",
+    y = "Log2 Fold-Change (PS1/PS2)",
+    caption = "Dashed lines: 2× fold-change threshold"
+  ) +
+  scale_fill_manual(values = c("Higher in PS1" = "#2C7BB6",
+                               "Higher in PS2" = "#D7191C")) +
+  theme(legend.position = "bottom")
+```
+
+```{r compositional-reconciliation, results='asis'}
+cat("\n### Reconciling Large Fold-Changes with Low R²\n\n")
+
+max_fc <- fc_data$fold_change[1]
+max_fc_family <- fc_data$Family[1]
+
+cat(sprintf("We observe substantial taxon-specific compositional differences between
+primer sets, with a maximum fold-change of %.1f× for %s. Yet our stratified
+PERMANOVA shows primer choice explains only R² = %.3f (%.1f%%) of sample-to-sample
+variation.\n\n", max_fc, max_fc_family, primer_r2_strata,
+primer_r2_strata * 100))
+
+if (primer_r2_strata < 0.15) {
+  cat("This apparent paradox—large univariate shifts but low multivariate R²—reveals
+that the primers are shifting community composition in a **consistent, parallel
+manner across all samples**. When all fish show similar directional shifts
+(e.g., all samples gain Hydroptilidae and lose Chironomidae in the same proportions),
+the absolute compositional changes are large, but the *relative ecological
+relationships between samples* are preserved.\n\n")
+
+  cat("This is actually **good news for cross-primer comparisons**: it means that
+while the primers detect different absolute abundances, they maintain the
+ecological structure (which species are similar vs. different). The biological
+signal—species-level dietary differences—is robust to primer choice because the
+primer bias affects all samples uniformly.\n\n")
+
+  cat(sprintf("In contrast, Esnaola et al. (2018) found R² = 0.353 for primer
+effects, suggesting their primers *differentially* affected samples in ways that
+disrupted ecological patterns. Our low R² (%.3f) with high concordance
+(Mantel r = %.3f, Procrustes r = %.3f) demonstrates primer compatibility despite
+absolute compositional shifts.\n\n", primer_r2_strata, mantel_result$statistic,
+pro_cor))
+} else {
+  cat("The combination of large fold-changes with moderate-to-high R² suggests that
+primers are *differentially* affecting samples (some samples shift more than others),
+which can disrupt ecological patterns. This indicates primer choice is a more
+critical consideration for interpreting community structure.\n\n")
+}
+```
+
+## Interpretation
+
+```{r primer-interpretation, results='asis'}
+# Generate interpretation based on actual results
+cat("\n### Biological Signal Strength\n\n")
+
+if (species_r2_ps1 > 0.353 && species_r2_ps2 > 0.353) {
+  cat(sprintf("Both primer sets demonstrate strong biological signal: PS1 (R² = %.3f) and PS2 (R² = %.3f) both exceed the primer effect threshold (R² = 0.353) documented by Esnaola et al. (2018). This indicates that species-level dietary variation dominates over any potential technical variation introduced by primer choice.\n\n", species_r2_ps1, species_r2_ps2))
+} else if (mean_r2 > 0.353) {
+  cat(sprintf("On average, biological variation (mean R² = %.3f) exceeds the technical variation threshold from Esnaola et al. (R² = 0.353), though individual primer sets show variable strength (PS1: %.3f, PS2: %.3f).\n\n", mean_r2, species_r2_ps1, species_r2_ps2))
+} else {
+  cat(sprintf("Both primer sets show biological signal below Esnaola's primer effect threshold (PS1: %.3f, PS2: %.3f), suggesting moderate species-level dietary differentiation at this site.\n\n", species_r2_ps1, species_r2_ps2))
+}
+
+cat("### Primer Concordance\n\n")
+
+# Determine concordance levels
+mantel_level <- ifelse(mantel_result$statistic > 0.6, "strong",
+                      ifelse(mantel_result$statistic > 0.4, "moderate", "weak"))
+# For Procrustes: LOW m² = GOOD fit, HIGH correlation = GOOD concordance
+procrustes_level <- ifelse(pro_cor > 0.8, "strong",
+                          ifelse(pro_cor > 0.6, "moderate", "weak"))
+
+cat(sprintf("The two primer sets show %s concordance in both distance-based (Mantel r = %.3f, p %s) and ordination-based (Procrustes correlation = %.3f, m² = %.4f, p %s) tests. ",
+            mantel_level, mantel_result$statistic,
+            format.pval(mantel_result$signif, digits = 3),
+            pro_cor, pro_m2,
+            format.pval(pro_test$signif, digits = 3)))
+
+# Note: LOW m² means GOOD fit (0 = perfect superimposition)
+if (mantel_result$statistic > 0.6 && pro_cor > 0.8) {
+  cat("Both metrics indicate highly consistent dietary patterns despite sequencing different molecular markers, demonstrating that our results are robust to primer choice.\n\n")
+} else if (mantel_result$statistic > 0.4 || pro_cor > 0.6) {
+  cat("The primers detect reasonably consistent patterns, though some technical variation is evident.\n\n")
+} else {
+  cat("Concordance is limited, suggesting potential primer-specific biases that should be considered when interpreting results.\n\n")
+}
+
+cat("### Primer Effect Size\n\n")
+
+cat(sprintf("Direct PERMANOVA testing shows that primer choice explains R² = %.3f (%.1f%%) of community variation (unstratified) and R² = %.3f (%.1f%%) when accounting for the paired design (stratified by sample). ",
+            primer_r2, primer_r2 * 100, primer_r2_strata, primer_r2_strata * 100))
+
+# Use stratified result for primary interpretation (accounts for paired design)
+primer_effect_primary <- primer_r2_strata
+
+if (primer_effect_primary < 0.353) {
+  cat(sprintf("The stratified analysis (R² = %.3f) represents %.0f%% of the primer effect observed by Esnaola et al. (R² = 0.353), suggesting our primers show substantially less bias than the universal COI primers tested in their Mediterranean fish diet study. ",
+              primer_effect_primary, (primer_effect_primary / 0.353) * 100))
+
+  if (primer_effect_primary < mean_r2) {
+    cat(sprintf("Importantly, our primer effect (R² = %.3f) is smaller than the species effect in both primer sets (mean R² = %.3f), demonstrating that biological signal dominates over technical variation.\n\n",
+                primer_effect_primary, mean_r2))
+  } else {
+    cat(sprintf("However, this primer effect (R² = %.3f) is comparable to or exceeds the species effect (mean R² = %.3f), suggesting substantial technical variation that should be considered in interpretation.\n\n",
+                primer_effect_primary, mean_r2))
+  }
+} else {
+  cat(sprintf("This matches or exceeds Esnaola's primer effect (R² = 0.353), indicating substantial technical variation comparable to their study.\n\n"))
+}
+
+cat("### Contrast to Esnaola et al. (2018)\n\n")
+cat(sprintf("Esnaola et al. reported that primer choice explained 35.3%% of variation (nearly twice their study site effect of 18.4%%). Our paired-sample design, where both primers are applied to identical biological material, yields a primer effect of R² = %.3f (%.1f%%) in the stratified analysis that accounts for paired samples. ",
+            primer_r2_strata, primer_r2_strata * 100))
+
+if (primer_r2_strata < 0.353 && mantel_result$statistic > 0.5) {
+  cat(sprintf("The combination of lower primer effect size (%.1f%% of Esnaola's) and strong concordance (Mantel r = %.3f) suggests that our primers are more compatible than those tested by Esnaola, possibly due to better taxonomic coverage in our study system or reduced primer bias. ",
+      (primer_r2_strata / 0.353) * 100, mantel_result$statistic))
+  cat("Additionally, their large primer effect may have been partially confounded by uncontrolled differences in sample composition or environmental conditions between primer sets, which our paired design explicitly controls for.\n\n")
+} else if (primer_r2_strata >= 0.353) {
+  cat(sprintf("Like Esnaola et al., we observe substantial primer-related variation, reinforcing the importance of primer choice in metabarcoding studies. This primer effect (R² = %.3f) is comparable to Esnaola's finding, suggesting it may be an inherent challenge in multi-primer COI metabarcoding rather than a study-specific artifact.\n\n",
+              primer_r2_strata))
+} else {
+  cat("While our primer effect is reduced compared to Esnaola's, the moderate concordance suggests that primer choice remains an important consideration in metabarcoding study design and interpretation.\n\n")
+}
+```
+
+---
+
+# LEVEL 1: Mormyrid Community at Balé Creek
+
+**Biological context:** 9 mormyrid species, 35 individuals, single site. This level controls for geography and examines dietary differences among sympatric species.
+
+## 1.1 Prey Composition Summary
+
+Family-level prey composition across the 9 Balé Creek mormyrid species.
+
+```{r level1-prey-composition}
+cat("=== LEVEL 1.1: PREY COMPOSITION (FAMILY LEVEL) ===\n\n")
+
+# Aggregate to family level
+ps1_bale_family <- aggregate_to_family(ps1_bale)
+ps2_bale_family <- aggregate_to_family(ps2_bale)
+
+cat("Family-level aggregation:\n")
+cat("  PS1:", ntaxa(ps1_bale_family), "families\n")
+cat("  PS2:", ntaxa(ps2_bale_family), "families\n")
+
+# Calculate summary statistics (top families)
+# Convert to relative abundance and get mean ± SD per species
+ps1_bale_rel <- transform_sample_counts(ps1_bale_family, function(x) x / sum(x) * 100)
+ps2_bale_rel <- transform_sample_counts(ps2_bale_family, function(x) x / sum(x) * 100)
+
+# Melt and summarize
+calc_family_summary <- function(ps_rel) {
+  ps_melt <- psmelt(ps_rel)
+  ps_melt$Family_clean <- sapply(ps_melt$Family, clean_family_name)
+
+  summary_table <- ps_melt %>%
+    group_by(Family_clean) %>%
+    summarise(
+      mean_pct = mean(Abundance),
+      sd_pct = sd(Abundance),
+      n_samples = n(),
+      .groups = "drop"
+    ) %>%
+    arrange(desc(mean_pct)) %>%
+    mutate(mean_sd = paste0(round(mean_pct, 2), " ± ", round(sd_pct, 2)))
+
+  return(summary_table)
+}
+
+summary_ps1 <- calc_family_summary(ps1_bale_rel)
+summary_ps2 <- calc_family_summary(ps2_bale_rel)
+
+cat("\nTop 10 prey families (Primer Set 1):\n")
+print(head(summary_ps1, 10))
+
+cat("\nTop 10 prey families (Primer Set 2):\n")
+print(head(summary_ps2, 10))
+
+# Identify top families across BOTH datasets for unified legend
+combined_summary <- bind_rows(
+  summary_ps1 %>% mutate(Dataset = "PS1"),
+  summary_ps2 %>% mutate(Dataset = "PS2")
+) %>%
+  group_by(Family_clean) %>%
+  summarise(Mean_Prop = mean(mean_pct), .groups = "drop") %>%
+  arrange(desc(Mean_Prop)) %>%
+  slice_head(n = 10)
+
+top_families_unified <- combined_summary$Family_clean
+
+# Ensure all top families have colors assigned in global palette
+missing_families <- setdiff(top_families_unified, names(GLOBAL_FAMILY_COLORS))
+if (length(missing_families) > 0) {
+  cat("Adding colors for", length(missing_families), "families not in global palette:\n")
+  cat("  ", paste(missing_families, collapse = ", "), "\n")
+
+  # Get additional colors from the same palette used in create_global_family_palette
+  distinct_colors <- c(
+    "#4477AA", "#EE6677", "#228833", "#CCBB44", "#66CCEE", "#AA3377", "#BBBBBB",
+    "#EE3377", "#009988", "#CC3311", "#EE7733", "#0077BB", "#33BBEE", "#EE3377",
+    "#CC6677", "#882255", "#AA4499", "#117733", "#332288", "#44AA99", "#999933",
+    "#DDCC77", "#661100", "#6699CC", "#AA4466", "#888888", "#771122", "#DD7788"
+  )
+
+  # Find colors not yet used
+  used_colors <- GLOBAL_FAMILY_COLORS[names(GLOBAL_FAMILY_COLORS) != "Other"]
+  available_colors <- setdiff(distinct_colors, used_colors)
+
+  # Add colors for missing families
+  new_colors <- setNames(
+    available_colors[1:length(missing_families)],
+    missing_families
+  )
+  GLOBAL_FAMILY_COLORS <- c(GLOBAL_FAMILY_COLORS, new_colors)
+}
+
+# Create modified plot function that uses pre-specified families
+plot_composition_unified <- function(ps, group_var, families_to_show, title = "") {
+  ps_melt <- psmelt(ps)
+  ps_melt$Family_clean <- sapply(ps_melt$Family, clean_family_name)
+
+  ps_agg <- ps_melt %>%
+    group_by(.data[[group_var]], Family_clean) %>%
+    summarise(Abundance = sum(Abundance), .groups = "drop")
+
+  ps_agg <- ps_agg %>%
+    group_by(.data[[group_var]]) %>%
+    mutate(RelAbund = Abundance / sum(Abundance)) %>%
+    ungroup()
+
+  # Use provided families
+  ps_final <- ps_agg %>%
+    mutate(Family_display = ifelse(Family_clean %in% families_to_show,
+                                   Family_clean, "Other")) %>%
+    group_by(.data[[group_var]], Family_display) %>%
+    summarise(RelAbund = sum(RelAbund), .groups = "drop")
+
+  # Consistent factor levels across all plots
+  all_levels <- c(families_to_show, "Other")
+  ps_final$Family_display <- factor(ps_final$Family_display,
+                                     levels = all_levels)
+
+  p <- ggplot(ps_final, aes(x = .data[[group_var]], y = RelAbund,
+                            fill = Family_display)) +
+    geom_bar(stat = "identity", position = "stack") +
+    scale_fill_manual(values = GLOBAL_FAMILY_COLORS,
+                      breaks = all_levels,
+                      name = "Prey Family",
+                      na.value = "#808080",
+                      drop = FALSE) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    labs(title = title, x = group_var, y = "Relative Abundance") +
+    scale_y_continuous(labels = scales::percent)
+
+  return(p)
+}
+
+# Create stacked bar plots with unified family list
+p1 <- plot_composition_unified(ps1_bale_family, group_var = "sample_Species",
+                               families_to_show = top_families_unified,
+                               title = "Prey Composition - Balé Creek (PS1)")
+
+p2 <- plot_composition_unified(ps2_bale_family, group_var = "sample_Species",
+                               families_to_show = top_families_unified,
+                               title = "Prey Composition - Balé Creek (PS2)")
+
+# Display side by side with unified legend
+# Manually create unified legend since patchwork guides="collect" isn't working
+library(cowplot)
+
+# Remove legends from both plots
+p1_no_legend <- p1 + theme(legend.position = "none")
+p2_no_legend <- p2 + theme(legend.position = "none")
+
+# Create a dummy plot with ALL families for legend extraction
+# Combine data from both plots to ensure all families appear
+dummy_data <- data.frame(
+  x = rep("A", length(top_families_unified) + 1),
+  y = rep(1, length(top_families_unified) + 1),
+  Family = factor(c(top_families_unified, "Other"),
+                  levels = c(top_families_unified, "Other"))
+)
+
+p_dummy <- ggplot(dummy_data, aes(x = x, y = y, fill = Family)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = GLOBAL_FAMILY_COLORS,
+                    breaks = c(top_families_unified, "Other"),
+                    name = "Prey Family",
+                    drop = FALSE) +
+  theme(legend.position = "bottom",
+        legend.key.size = unit(0.4, "cm")) +
+  guides(fill = guide_legend(ncol = 5, byrow = TRUE, title = "Prey Family"))
+
+# Extract legend from dummy plot (has all families)
+legend <- get_legend(p_dummy)
+
+# Combine plots and legend
+plot_grid(
+  plot_grid(p1_no_legend, p2_no_legend, ncol = 2),
+  legend,
+  ncol = 1,
+  rel_heights = c(1, 0.15)
+)
+```
+
+Top prey families table:
+
+```{r level1-top-families-table}
+# Combine top families from both primer sets
+top_families_combined <- full_join(
+  summary_ps1 %>% select(Family_clean, mean_pct, sd_pct) %>% slice_head(n = 15),
+  summary_ps2 %>% select(Family_clean, mean_pct, sd_pct) %>% slice_head(n = 15),
+  by = "Family_clean",
+  suffix = c("_PS1", "_PS2")
+) %>%
+  arrange(desc(pmax(mean_pct_PS1, mean_pct_PS2, na.rm = TRUE)))
+
+kable(top_families_combined,
+      caption = "Top 15 prey families at Balé Creek (mean $\\pm$ SD relative abundance \\%)",
+      digits = 2,
+      col.names = c("Family", "Mean \\% (PS1)", "SD (PS1)", "Mean \\% (PS2)", "SD (PS2)"),
+      booktabs = TRUE) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+```
+
+## 1.2 Alpha Diversity Among Species
+
+Shannon diversity analysis across Balé Creek species with cross-primer validation.
+
+```{r level1-alpha-diversity, fig.width=12, fig.height=6}
+cat("=== LEVEL 1.2: ALPHA DIVERSITY AMONG SPECIES ===\n\n")
+
+# Analyze alpha diversity for both primer sets
+alpha1_bale <- analyze_alpha_diversity(ps1_bale, "Species")
+alpha2_bale <- analyze_alpha_diversity(ps2_bale, "Species")
+
+cat("\n=== PRIMERSET 1 - Balé Creek Shannon Diversity ===\n")
+cat("Test type:", alpha1_bale$test_type, "\n")
+cat("Shapiro-Wilk p-value:", round(alpha1_bale$shapiro_p, 4), "\n")
+if (alpha1_bale$test_type == "Kruskal-Wallis") {
+  print(alpha1_bale$test)
+} else {
+  print(summary(alpha1_bale$test))
+}
+
+cat("\n=== PRIMERSET 2 - Balé Creek Shannon Diversity ===\n")
+cat("Test type:", alpha2_bale$test_type, "\n")
+cat("Shapiro-Wilk p-value:", round(alpha2_bale$shapiro_p, 4), "\n")
+if (alpha2_bale$test_type == "Kruskal-Wallis") {
+  print(alpha2_bale$test)
+} else {
+  print(summary(alpha2_bale$test))
+}
+
+# Comparative plot
+p_bale_alpha_comp <- plot_comparative_shannon(alpha1_bale$diversity,
+                                              alpha2_bale$diversity,
+                                              "Species",
+                                              "Balé Creek Species Diet Diversity Comparison")
+print(p_bale_alpha_comp)
+```
+
+### Cross-Primer Correlation for Alpha Diversity
+
+```{r level1-alpha-correlation, fig.width=8, fig.height=6}
+# Correlate Shannon values for shared samples
+cor_bale_alpha <- correlate_shared_samples(alpha1_bale$diversity,
+                                          alpha2_bale$diversity)
+
+cat("\n=== BALÉ CREEK ALPHA DIVERSITY CORRELATION ===\n")
+cat("Shared samples:", cor_bale_alpha$n_shared, "\n")
+
+if (!is.null(cor_bale_alpha$cor_test)) {
+  cat("Pearson r:", round(cor_bale_alpha$cor_test$estimate, 3), "\n")
+  cat("95% CI: [", round(cor_bale_alpha$cor_test$conf.int[1], 3), ",",
+      round(cor_bale_alpha$cor_test$conf.int[2], 3), "]\n")
+  cat("P-value:", format.pval(cor_bale_alpha$cor_test$p.value, digits = 3), "\n")
+
+  # Scatterplot - get shared samples
+  shared_ids <- intersect(alpha1_bale$diversity$Sample_Name,
+                          alpha2_bale$diversity$Sample_Name)
+
+  # Filter to shared samples and match order
+  div1_shared <- alpha1_bale$diversity %>%
+    filter(Sample_Name %in% shared_ids) %>%
+    arrange(Sample_Name)
+  div2_shared <- alpha2_bale$diversity %>%
+    filter(Sample_Name %in% shared_ids) %>%
+    arrange(Sample_Name)
+
+  cor_df <- data.frame(
+    PS1_Shannon = div1_shared$Shannon,
+    PS2_Shannon = div2_shared$Shannon
+  )
+
+  p_alpha_cor <- ggplot(cor_df, aes(x = PS1_Shannon, y = PS2_Shannon)) +
+    geom_point(size = 3, alpha = 0.6, color = ps1_color) +
+    geom_smooth(method = "lm", se = TRUE, color = "black", linetype = "dashed") +
+    geom_abline(slope = 1, intercept = 0, linetype = "dotted", color = "gray50") +
+    theme_minimal() +
+    labs(title = "Balé Creek: Shannon Diversity Correlation",
+         subtitle = paste0("r = ", round(cor_bale_alpha$cor_test$estimate, 3),
+                          ", p ", format.pval(cor_bale_alpha$cor_test$p.value, digits = 2)),
+         x = "Primerset 1 Shannon", y = "Primerset 2 Shannon") +
+    coord_fixed()
+
+  print(p_alpha_cor)
+} else {
+  cat(cor_bale_alpha$message, "\n")
+}
+```
+
+## 1.3 Beta Diversity Among Species
+
+Bray-Curtis dissimilarity analysis with PERMANOVA testing for dietary differences among species.
+
+```{r level1-beta-diversity, fig.width=14, fig.height=6}
+cat("\n=== LEVEL 1.3: BETA DIVERSITY AMONG SPECIES ===\n\n")
+
+# Filter species with < 3 samples for stable PERMANOVA
+cat("=== PRIMERSET 1 FILTERING ===\n")
+ps1_bale_filt <- filter_low_n_species(ps1_bale, min_n = 3)
+
+cat("\n=== PRIMERSET 2 FILTERING ===\n")
+ps2_bale_filt <- filter_low_n_species(ps2_bale, min_n = 3)
+
+# Run beta diversity analyses
+beta1_bale <- run_beta_diversity_analysis(ps1_bale_filt, "~ Species")
+beta2_bale <- run_beta_diversity_analysis(ps2_bale_filt, "~ Species")
+
+cat("\n=== PRIMERSET 1 - Balé Creek PERMANOVA ===\n")
+print(beta1_bale$permanova)
+
+cat("\n=== PRIMERSET 2 - Balé Creek PERMANOVA ===\n")
+print(beta2_bale$permanova)
+
+# Faceted PCoA plot
+p_bale_pcoa <- plot_faceted_pcoa(beta1_bale, beta2_bale,
+                                 color_var = "Species",
+                                 title = "Balé Creek Diet Composition by Species")
+print(p_bale_pcoa)
+```
+
+### Pairwise PERMANOVA Tests
+
+```{r level1-beta-pairwise}
+# Pairwise tests if more than 2 species
+n_species_ps1 <- length(unique(sample_data(ps1_bale_filt)$Species))
+n_species_ps2 <- length(unique(sample_data(ps2_bale_filt)$Species))
+
+cat("\n=== PAIRWISE PERMANOVA TESTS ===\n")
+
+if (n_species_ps1 > 2) {
+  cat("\n#### PRIMERSET 1:\n\n")
+  pairwise1_bale <- pairwise.adonis2(beta1_bale$distance ~ Species,
+                                     data = beta1_bale$metadata)
+  # Sanitize row names for LaTeX (replace _ with space)
+  pairwise1_df <- as.data.frame(pairwise1_bale)
+  rownames(pairwise1_df) <- gsub("_", " vs ", rownames(pairwise1_df))
+  # Select only key columns to fit on page
+  key_cols <- intersect(colnames(pairwise1_df), c("R2", "F.Model", "Pr(>F)"))
+  if (length(key_cols) == 0) {
+    # If those columns don't exist, take first 3 numeric columns plus p-value
+    key_cols <- colnames(pairwise1_df)[1:min(4, ncol(pairwise1_df))]
+  }
+  kable(pairwise1_df[, key_cols, drop = FALSE],
+              digits = 3,
+              booktabs = TRUE,
+              caption = "Pairwise PERMANOVA: Primerset 1") %>%
+        kable_styling(latex_options = c("striped", "HOLD_position"),
+                      font_size = 9,
+                      full_width = FALSE)
+}
+
+if (n_species_ps2 > 2) {
+  cat("\n#### PRIMERSET 2:\n\n")
+  pairwise2_bale <- pairwise.adonis2(beta2_bale$distance ~ Species,
+                                     data = beta2_bale$metadata)
+  # Sanitize row names for LaTeX (replace _ with space)
+  pairwise2_df <- as.data.frame(pairwise2_bale)
+  rownames(pairwise2_df) <- gsub("_", " vs ", rownames(pairwise2_df))
+  # Select only key columns to fit on page
+  key_cols <- intersect(colnames(pairwise2_df), c("R2", "F.Model", "Pr(>F)"))
+  if (length(key_cols) == 0) {
+    # If those columns don't exist, take first 3 numeric columns plus p-value
+    key_cols <- colnames(pairwise2_df)[1:min(4, ncol(pairwise2_df))]
+  }
+  kable(pairwise2_df[, key_cols, drop = FALSE],
+              digits = 3,
+              booktabs = TRUE,
+              caption = "Pairwise PERMANOVA: Primerset 2") %>%
+        kable_styling(latex_options = c("striped", "HOLD_position"),
+                      font_size = 9,
+                      full_width = FALSE)
+}
+```
+
+### Beta Diversity Cross-Validation (Mantel Test)
+
+```{r level1-beta-mantel}
+# Find shared Sample_Names between datasets
+samples1_bale <- beta1_bale$metadata$Sample_Name
+samples2_bale <- beta2_bale$metadata$Sample_Name
+shared_bale <- intersect(samples1_bale, samples2_bale)
+
+cat("\n=== BALÉ CREEK BETA DIVERSITY MANTEL TEST ===\n")
+cat("Shared Sample_Names:", length(shared_bale), "\n")
+
+if (length(shared_bale) >= 3) {
+  # Convert distance matrices to matrices with Sample_Name labels
+  dist1_mat <- as.matrix(beta1_bale$distance)
+  dist2_mat <- as.matrix(beta2_bale$distance)
+
+  # Relabel with Sample_Names
+  rownames(dist1_mat) <- beta1_bale$metadata$Sample_Name
+  colnames(dist1_mat) <- beta1_bale$metadata$Sample_Name
+  rownames(dist2_mat) <- beta2_bale$metadata$Sample_Name
+  colnames(dist2_mat) <- beta2_bale$metadata$Sample_Name
+
+  # Subset to shared Sample_Names (automatically aligned)
+  dist1_shared <- as.dist(dist1_mat[shared_bale, shared_bale])
+  dist2_shared <- as.dist(dist2_mat[shared_bale, shared_bale])
+
+  # Mantel test
+  mantel_bale <- run_mantel_test(dist1_shared, dist2_shared)
+
+  cat("\nMantel statistic (r):", round(mantel_bale$statistic, 3), "\n")
+  cat("P-value:", format.pval(mantel_bale$signif, digits = 3), "\n")
+  cat("Interpretation:",
+      ifelse(mantel_bale$statistic > 0.5, "Strong concordance",
+             ifelse(mantel_bale$statistic > 0.3, "Moderate concordance",
+                    "Weak concordance")), "\n")
+} else {
+  cat("Insufficient shared samples for Mantel test.\n")
+  mantel_bale <- NULL
+}
+```
+
+## 1.4 Diet Overlap Indices
+
+Schoener and Pianka diet overlap indices quantify dietary similarity among species. We test whether overlap is higher within *Paramormyrops* species than between genera.
+
+```{r level1-diet-overlap}
+cat("\n=== LEVEL 1.4: DIET OVERLAP INDICES ===\n\n")
+
+# Function to calculate diet overlap for a phyloseq object
+calculate_diet_overlap_bale <- function(ps_bale, primerset_name) {
+
+  cat("\n=== ", primerset_name, " - Diet Overlap ===\n", sep = "")
+
+  # Get OTU and taxonomy
+  otu_mat <- t(as.matrix(otu_table(ps_bale)))
+  tax_df <- as.data.frame(tax_table(ps_bale))
+  meta <- data.frame(sample_data(ps_bale), stringsAsFactors = FALSE)
+
+  # Create taxonomic label (Order level)
+  tax_df$TaxLabel <- ifelse(!is.na(tax_df$Order) & tax_df$Order != "",
+                           tax_df$Order,
+                           ifelse(!is.na(tax_df$Family) & tax_df$Family != "",
+                                 tax_df$Family,
+                                 ifelse(!is.na(tax_df$Class) & tax_df$Class != "",
+                                       tax_df$Class, "Unclassified")))
+
+  # Aggregate by taxonomic group
+  otu_df <- as.data.frame(otu_mat)
+  otu_tax <- data.frame(row.names = rownames(otu_df))
+
+  for (taxon in unique(tax_df$TaxLabel)) {
+    asvs_in_taxon <- rownames(tax_df)[tax_df$TaxLabel == taxon]
+    asvs_present <- asvs_in_taxon[asvs_in_taxon %in% colnames(otu_df)]
+
+    if (length(asvs_present) > 0) {
+      if (length(asvs_present) == 1) {
+        otu_tax[[taxon]] <- otu_df[[asvs_present]]
+      } else {
+        otu_tax[[taxon]] <- rowSums(otu_df[, asvs_present, drop = FALSE])
+      }
+    }
+  }
+
+  # Aggregate by species
+  otu_agg <- aggregate(otu_tax, by = list(Species = meta$Species), FUN = sum)
+  rownames(otu_agg) <- otu_agg$Species
+  otu_agg <- otu_agg[, -1]
+
+  # Check number of species
+  n_species <- nrow(otu_agg)
+  cat("Number of species:", n_species, "\n")
+
+  # Need at least 2 species for pairwise overlap
+  if (n_species < 2) {
+    cat("Warning: Only", n_species, "species found. Cannot calculate pairwise overlap.\n")
+    return(list(schoener = NA, pianka = NA, taxa = unique(tax_df$TaxLabel),
+                species_list = rownames(otu_agg)))
+  }
+
+  # Convert to matrix for proper handling
+  otu_mat_agg <- as.matrix(otu_agg)
+
+  # Check for empty rows
+  row_sums <- rowSums(otu_mat_agg)
+  cat("Row sums range:", min(row_sums), "-", max(row_sums), "\n")
+
+  if (any(row_sums == 0)) {
+    cat("Warning: Found", sum(row_sums == 0), "species with zero reads\n")
+    otu_mat_agg <- otu_mat_agg[row_sums > 0, , drop = FALSE]
+    cat("Removing empty species. New count:", nrow(otu_mat_agg), "\n")
+
+    if (nrow(otu_mat_agg) < 2) {
+      cat("Warning: Less than 2 species with data after filtering.\n")
+      return(list(schoener = NA, pianka = NA, taxa = unique(tax_df$TaxLabel),
+                  species_list = rownames(otu_mat_agg)))
+    }
+  }
+
+  # Check for empty columns (taxonomic groups with no reads)
+  col_sums <- colSums(otu_mat_agg)
+  if (any(col_sums == 0)) {
+    cat("Warning: Found", sum(col_sums == 0), "taxa with zero reads\n")
+    otu_mat_agg <- otu_mat_agg[, col_sums > 0, drop = FALSE]
+    cat("Removing empty taxa. New count:", ncol(otu_mat_agg), "\n")
+  }
+
+  # Convert to proportions
+  otu_prop <- sweep(otu_mat_agg, 1, rowSums(otu_mat_agg), "/")
+
+  # Check for NaN in proportions
+  if (any(is.nan(otu_prop))) {
+    cat("Warning: NaN values in proportions matrix\n")
+  }
+
+  cat("Proportions matrix dimensions:", nrow(otu_prop), "x", ncol(otu_prop), "\n")
+
+  # Calculate overlap indices
+  # NOTE: niche.overlap expects species in COLUMNS, so transpose
+  schoener <- niche.overlap(t(otu_prop), method = "schoener")
+  pianka <- niche.overlap(t(otu_prop), method = "pianka")
+
+  # CRITICAL: niche.overlap returns a dist-like object, convert to matrix
+  species_names <- rownames(otu_prop)
+  schoener <- as.matrix(schoener)
+  pianka <- as.matrix(pianka)
+
+  # Now assign species names as dimnames
+  rownames(schoener) <- species_names
+  colnames(schoener) <- species_names
+  rownames(pianka) <- species_names
+  colnames(pianka) <- species_names
+
+  # Check if matrices have valid values
+  cat("Schoener matrix dimensions:", nrow(schoener), "x", ncol(schoener), "\n")
+  cat("Schoener matrix range:", min(schoener, na.rm = TRUE), "-",
+      max(schoener, na.rm = TRUE), "\n")
+
+  # Extract lower triangle for pairwise comparisons
+  schoener_vals <- schoener[lower.tri(schoener)]
+  pianka_vals <- pianka[lower.tri(pianka)]
+
+  cat("Schoener overlap (mean ± SD):",
+      round(mean(schoener_vals, na.rm = TRUE), 3), "±",
+      round(sd(schoener_vals, na.rm = TRUE), 3), "\n")
+
+  cat("Pianka overlap (mean ± SD):",
+      round(mean(pianka_vals, na.rm = TRUE), 3), "±",
+      round(sd(pianka_vals, na.rm = TRUE), 3), "\n")
+
+  return(list(schoener = schoener,
+              pianka = pianka,
+              taxa = unique(tax_df$TaxLabel),
+              species_list = species_names))
+}
+
+# Calculate for both primer sets
+overlap_ps1 <- calculate_diet_overlap_bale(ps1_bale, "PRIMERSET 1")
+overlap_ps2 <- calculate_diet_overlap_bale(ps2_bale, "PRIMERSET 2")
+
+# Taxonomic overlap
+shared_taxa <- intersect(overlap_ps1$taxa, overlap_ps2$taxa)
+cat("\n=== TAXONOMIC OVERLAP ===\n")
+cat("PS1 unique Orders:", length(overlap_ps1$taxa), "\n")
+cat("PS2 unique Orders:", length(overlap_ps2$taxa), "\n")
+cat("Shared Orders:", length(shared_taxa), "\n")
+cat("Jaccard similarity:",
+    round(length(shared_taxa) /
+          length(union(overlap_ps1$taxa, overlap_ps2$taxa)), 3), "\n")
+```
+
+### Within-Paramormyrops vs Between-Genus Overlap Test
+
+Test whether *Paramormyrops* species show higher dietary overlap with each other than with other genera.
+
+```{r level1-overlap-test}
+cat("\n=== WITHIN-PARAMORMYROPS VS. BETWEEN-GENUS OVERLAP TEST ===\n\n")
+
+# Function to categorize overlap comparisons
+test_paramormyrops_overlap <- function(overlap_matrix, species_list, primerset_name) {
+
+  cat("\n", primerset_name, ":\n", sep = "")
+
+  if (is.na(overlap_matrix[1]) || is.null(overlap_matrix)) {
+    cat("No valid overlap data\n")
+    return(NULL)
+  }
+
+  # Identify Paramormyrops species
+  is_paramormyrops <- grepl("Paramormyrops", species_list)
+  param_species <- species_list[is_paramormyrops]
+
+  cat("Paramormyrops species:", length(param_species), "\n")
+  cat("Other species:", sum(!is_paramormyrops), "\n")
+
+  # Extract overlap values
+  within_param <- c()
+  between_genus <- c()
+
+  for (i in 1:(length(species_list)-1)) {
+    for (j in (i+1):length(species_list)) {
+      sp1 <- species_list[i]
+      sp2 <- species_list[j]
+      overlap_val <- overlap_matrix[i, j]
+
+      # Both are Paramormyrops
+      if (is_paramormyrops[i] && is_paramormyrops[j]) {
+        within_param <- c(within_param, overlap_val)
+      }
+      # One is Paramormyrops, one is not
+      else if (is_paramormyrops[i] != is_paramormyrops[j]) {
+        between_genus <- c(between_genus, overlap_val)
+      }
+      # Neither is Paramormyrops - skip
+    }
+  }
+
+  cat("Within-Paramormyrops comparisons:", length(within_param), "\n")
+  cat("Between-genus comparisons:", length(between_genus), "\n")
+
+  if (length(within_param) > 0 && length(between_genus) > 0) {
+    cat("\nWithin-Paramormyrops overlap:", round(mean(within_param), 3),
+        "±", round(sd(within_param), 3), "\n")
+    cat("Between-genus overlap:", round(mean(between_genus), 3),
+        "±", round(sd(between_genus), 3), "\n")
+
+    # Wilcoxon test
+    wilcox_result <- wilcox.test(within_param, between_genus,
+                                  alternative = "greater")
+
+    cat("\nWilcoxon rank-sum test (one-sided):\n")
+    cat("W =", wilcox_result$statistic, "\n")
+    cat("p-value =", format.pval(wilcox_result$p.value, digits = 3), "\n")
+    cat("Interpretation:",
+        ifelse(wilcox_result$p.value < 0.05,
+               "Within-Paramormyrops overlap is significantly higher",
+               "No significant difference in overlap"), "\n")
+
+    return(list(within = within_param,
+                between = between_genus,
+                test = wilcox_result))
+  } else {
+    cat("Insufficient comparisons for statistical test\n")
+    return(NULL)
+  }
+}
+
+# Test for both primer sets (using Schoener index)
+test_ps1 <- test_paramormyrops_overlap(overlap_ps1$schoener,
+                                       overlap_ps1$species_list,
+                                       "PRIMERSET 1")
+test_ps2 <- test_paramormyrops_overlap(overlap_ps2$schoener,
+                                       overlap_ps2$species_list,
+                                       "PRIMERSET 2")
+```
+
+### Diet Overlap Heatmaps
+
+```{r level1-overlap-heatmaps, fig.width=10, fig.height=8}
+library(pheatmap)
+
+# Function to create heatmap for diet overlap
+plot_overlap_heatmap <- function(overlap_matrix, title, primerset) {
+
+  if (is.na(overlap_matrix[1]) || is.null(overlap_matrix)) {
+    cat("No valid data for", title, "-", primerset, "\n")
+    return(NULL)
+  }
+
+  if (is.null(rownames(overlap_matrix)) || is.null(colnames(overlap_matrix))) {
+    cat("Warning: Missing dimnames for", title, "-", primerset, "\n")
+    return(NULL)
+  }
+
+  p <- pheatmap(overlap_matrix,
+                cluster_rows = TRUE,
+                cluster_cols = TRUE,
+                display_numbers = TRUE,
+                number_format = "%.2f",
+                color = colorRampPalette(c("white", "yellow", "orange", "red"))(100),
+                main = paste0(title, " (", primerset, ")"),
+                fontsize_number = 8,
+                fontsize_row = 10,
+                fontsize_col = 10,
+                angle_col = 45,
+                cellwidth = 35,
+                cellheight = 35,
+                breaks = seq(0, 1, length.out = 101))
+
+  return(p)
+}
+
+# Create heatmaps for Primerset 1
+if (!is.na(overlap_ps1$schoener[1])) {
+  plot_overlap_heatmap(overlap_ps1$schoener,
+                       "Schoener Diet Overlap",
+                       "Primerset 1")
+  plot_overlap_heatmap(overlap_ps1$pianka,
+                       "Pianka Diet Overlap",
+                       "Primerset 1")
+}
+
+# Create heatmaps for Primerset 2
+if (!is.na(overlap_ps2$schoener[1])) {
+  plot_overlap_heatmap(overlap_ps2$schoener,
+                       "Schoener Diet Overlap",
+                       "Primerset 2")
+  plot_overlap_heatmap(overlap_ps2$pianka,
+                       "Pianka Diet Overlap",
+                       "Primerset 2")
+}
+```
+
+## 1.5 Phylogenetic Correlation Test
+
+Test whether dietary dissimilarity is correlated with phylogenetic distance (Mantel test).
+
+```{r level1-phylo-correlation}
+cat("\n=== LEVEL 1.5: PHYLOGENETIC CORRELATION TEST ===\n\n")
+
+# Function to perform phylogenetic-dietary correlation
+test_phylo_diet_correlation <- function(beta_result, phylo_dist_matrix,
+                                        phylo_tree_obj, primerset_name) {
+
+  cat("\n", primerset_name, ":\n", sep = "")
+
+  # Get species from beta diversity metadata
+  meta <- beta_result$metadata
+  species_in_data <- unique(meta$Species)
+
+  cat("Species in dietary data:", length(species_in_data), "\n")
+
+  # Create a temporary phyloseq object to use the matching function
+  # We just need the metadata, so create a minimal phyloseq object
+  temp_otu <- otu_table(matrix(1, nrow = 1, ncol = nrow(meta)),
+                        taxa_are_rows = TRUE)
+  colnames(temp_otu) <- rownames(meta)
+  temp_meta <- sample_data(meta)
+  sample_names(temp_meta) <- rownames(meta)
+  temp_ps <- phyloseq(temp_otu, temp_meta)
+
+  # Use the fuzzy matching function to map species to tree tips
+  match_results <- match_bale_species_to_phylogeny(temp_ps, phylo_tree_obj)
+
+  cat("Species matched to phylogeny:", match_results$n_matched, "/",
+      match_results$n_species, "\n")
+
+  if (match_results$n_matched < 3) {
+    cat("Insufficient species overlap with phylogeny (need >= 3)\n")
+    return(NULL)
+  }
+
+  # Create species-to-tip mapping for matched species
+  match_table <- match_results$match_table
+  match_table <- match_table[!is.na(match_table$tree_tip), ]
+
+  # Get species that have matches
+  shared_species <- match_table$bale_species
+  cat("Shared species:", length(shared_species), "\n")
+  cat("  ", paste(shared_species, collapse = ", "), "\n")
+
+  # Create species-level dietary distance matrix
+  # Average dietary distance between all samples of each species pair
+  diet_dist_species <- matrix(0, nrow = length(shared_species),
+                              ncol = length(shared_species))
+  rownames(diet_dist_species) <- shared_species
+  colnames(diet_dist_species) <- shared_species
+
+  for (i in 1:length(shared_species)) {
+    for (j in 1:length(shared_species)) {
+      if (i != j) {
+        # Get samples for species i and j
+        samples_i <- rownames(meta)[meta$Species == shared_species[i]]
+        samples_j <- rownames(meta)[meta$Species == shared_species[j]]
+
+        # Extract pairwise distances from distance matrix
+        dist_mat <- as.matrix(beta_result$distance)
+        pairwise_dists <- dist_mat[samples_i, samples_j]
+
+        # Average distance between species
+        diet_dist_species[i, j] <- mean(pairwise_dists, na.rm = TRUE)
+      }
+    }
+  }
+
+  # Convert to dist object
+  diet_dist_species <- as.dist(diet_dist_species)
+
+  # Create phylogenetic distance matrix using tree tips
+  tree_tips <- match_table$tree_tip
+  names(tree_tips) <- match_table$bale_species
+
+  # Extract phylogenetic distances for matched tips
+  phylo_dist_tips <- phylo_dist_matrix[tree_tips, tree_tips]
+
+  # Rename to species names for consistency
+  rownames(phylo_dist_tips) <- names(tree_tips)
+  colnames(phylo_dist_tips) <- names(tree_tips)
+
+  # Ensure same order as diet_dist_species
+  phylo_dist_tips <- phylo_dist_tips[shared_species, shared_species]
+  phylo_dist_shared <- as.dist(phylo_dist_tips)
+
+  # Mantel test
+  mantel_result <- vegan::mantel(diet_dist_species, phylo_dist_shared,
+                                 method = "pearson", permutations = 999)
+
+  cat("\nMantel Test Results:\n")
+  cat("Mantel statistic (r):", round(mantel_result$statistic, 3), "\n")
+  cat("P-value:", format.pval(mantel_result$signif, digits = 3), "\n")
+  cat("Interpretation:",
+      ifelse(mantel_result$signif < 0.05,
+             "Significant phylogenetic signal in diet",
+             "No significant phylogenetic signal in diet"), "\n")
+
+  return(list(
+    mantel = mantel_result,
+    diet_dist = diet_dist_species,
+    phylo_dist = phylo_dist_shared,
+    shared_species = shared_species,
+    match_table = match_table
+  ))
+}
+
+# Test for both primer sets (if phylogeny is available)
+if (!is.null(phylo_dist) && !is.null(phylo_tree)) {
+  phylo_cor_ps1 <- test_phylo_diet_correlation(beta1_bale, phylo_dist,
+                                                phylo_tree, "PRIMERSET 1")
+  phylo_cor_ps2 <- test_phylo_diet_correlation(beta2_bale, phylo_dist,
+                                                phylo_tree, "PRIMERSET 2")
+} else {
+  cat("Phylogenetic data not available. Skipping analysis.\n")
+  phylo_cor_ps1 <- NULL
+  phylo_cor_ps2 <- NULL
+}
+```
+
+## 1.6 SIMPER Analysis - Species
+
+Similarity Percentage (SIMPER) analysis identifies which prey taxa contribute most to dietary differences among species.
+
+```{r level1-simper, results='asis',out.width="80%"}
+cat("\n=== LEVEL 1.6: SIMPER ANALYSIS - SPECIES ===\n\n")
+
+# Function to run and summarize SIMPER
+run_simper_analysis <- function(ps, primerset_name, top_n = 10,
+                                detailed_output = FALSE) {
+
+  cat("\n", primerset_name, ":\n", sep = "")
+
+  # Get OTU table (samples as rows, taxa as columns)
+  otu_mat <- as.matrix(otu_table(ps))
+  if (taxa_are_rows(ps)) {
+    otu_mat <- t(otu_mat)
+  }
+
+  # Get metadata
+  meta <- data.frame(sample_data(ps))
+
+  # Run SIMPER
+  simper_result <- vegan::simper(otu_mat, meta$Species, permutations = 999)
+
+  cat("\nSIMPER analysis complete\n")
+  cat("Number of species comparisons:", length(simper_result), "\n")
+
+  # Extract top contributors for each comparison
+  simper_summary <- summary(simper_result)
+
+  # Create consolidated heatmap or detailed tables based on parameter
+  if (!detailed_output) {
+    cat("\nCreating consolidated heatmap of top prey families...\n")
+    heatmap_plot <- plot_simper_heatmap(simper_result, ps,
+                                        top_n = 15,
+                                        primerset_name = primerset_name)
+    print(heatmap_plot)
+    cat("\nDetailed tables suppressed. Set detailed_output = TRUE to view.\n\n")
+  } else {
+    cat("\nTop", top_n, "prey taxa contributing to species differences:\n\n")
+
+    # Print summary for each pairwise comparison
+    for (comparison_name in names(simper_summary)) {
+    # Sanitize comparison name for LaTeX
+    comparison_name_clean <- gsub("_", " vs ", comparison_name)
+    cat("###", comparison_name_clean, "\n\n")
+
+    comparison_data <- simper_summary[[comparison_name]]
+
+    # Check structure and convert if needed
+    if (!is.data.frame(comparison_data)) {
+      comparison_data <- as.data.frame(comparison_data)
+    }
+
+    # Skip if no data
+    if (nrow(comparison_data) == 0) {
+      cat("Warning: No data for this comparison. Skipping.\n\n")
+      next
+    }
+
+    # Add contr column (use 'average' which is the contribution to dissimilarity)
+    # The cumsum column already exists from vegan's summary()
+    comparison_data$contr <- comparison_data$average
+
+    # Filter to cumulative contribution < 70%
+    # Note: cumsum is already calculated by vegan, but it's as a proportion
+    # We need to recalculate based on percentage contribution
+    total_dissim <- sum(comparison_data$average, na.rm = TRUE)
+    comparison_data$pct_contrib <- (comparison_data$average / total_dissim) * 100
+    comparison_data$cumsum_pct <- cumsum(comparison_data$pct_contrib)
+
+    top_taxa <- comparison_data[comparison_data$cumsum_pct <= 70, ]
+
+    # If nothing meets 70%, take top 10
+    if (nrow(top_taxa) == 0) {
+      top_taxa <- head(comparison_data, top_n)
+    }
+
+    # Get taxonomy for these ASVs
+    tax_df <- as.data.frame(tax_table(ps))
+    top_taxa$ASV <- rownames(top_taxa)
+
+    # Add taxonomic names
+    top_taxa$Family <- sapply(top_taxa$ASV, function(asv) {
+      if (asv %in% rownames(tax_df)) {
+        fam <- tax_df[asv, "Family"]
+        if (is.na(fam) || fam == "") {
+          return(tax_df[asv, "Order"])
+        }
+        return(clean_family_name(fam))
+      }
+      return("Unknown")
+    })
+
+    # Aggregate ASVs by Family for plotting
+    family_aggregated <- top_taxa %>%
+      group_by(Family) %>%
+      summarise(
+        pct_contrib = sum(pct_contrib),
+        n_asvs = n(),
+        .groups = "drop"
+      ) %>%
+      arrange(desc(pct_contrib))
+
+    # Select columns for display (ASV-level detail)
+    display_table <- top_taxa[, c("Family", "average", "sd", "ratio",
+                                  "ava", "avb", "pct_contrib",
+                                  "cumsum_pct")]
+
+    # Rename for clarity
+    colnames(display_table)[colnames(display_table) == "pct_contrib"] <- "% Contrib"
+    colnames(display_table)[colnames(display_table) == "cumsum_pct"] <- "Cum %"
+
+    # Round numeric columns
+    display_table[, c("average", "sd", "ratio", "ava", "avb",
+                      "% Contrib", "Cum %")] <-
+      round(display_table[, c("average", "sd", "ratio", "ava", "avb",
+                              "% Contrib", "Cum %")], 3)
+
+    cat(paste0("\n#### SIMPER: ", comparison_name_clean, "\n\n"))
+    # Limit to top 10 rows for space
+    display_table_top <- head(display_table, 10)
+    kable(display_table_top,
+                caption = paste("SIMPER:", comparison_name_clean, "(Top 10)"),
+                row.names = FALSE,
+                booktabs = TRUE) %>%
+            kable_styling(latex_options = c("striped", "HOLD_position"),
+                          bootstrap_options = c("striped", "hover"),
+                          full_width = FALSE, font_size = 8)
+
+    # Create family-aggregated plot
+    plot_data <- head(family_aggregated, 15)
+    plot_data$Family <- factor(plot_data$Family,
+                               levels = rev(plot_data$Family))
+
+    p <- ggplot(plot_data, aes(x = pct_contrib, y = Family)) +
+      geom_bar(stat = "identity", fill = "#0072B2", alpha = 0.7) +
+      theme_minimal() +
+      labs(title = paste0("Top Prey Families: ", comparison_name_clean,
+                          " (", primerset_name, ")"),
+           x = "% Contribution to Dissimilarity",
+           y = "Prey Family") +
+      theme()
+
+    print(p)
+
+    cat("\n\n")
+    }
+  }
+
+  return(simper_result)
+}
+
+# Run SIMPER for both primer sets (heatmap mode by default)
+simper_ps1 <- run_simper_analysis(ps1_bale_filt, "PRIMERSET 1",
+                                  detailed_output = FALSE)
+simper_ps2 <- run_simper_analysis(ps2_bale_filt, "PRIMERSET 2",
+                                  detailed_output = FALSE)
+```
+
+---
+
+# LEVEL 2: BP vs. TP Mormyrids Globally
+
+**Biological context:** All mormyrid species across all sites (97-99 individuals). This level examines the broadest dietary differences associated with EOD waveform type (biphasic vs. triphasic) across the entire mormyrid community.
+
+## 2.1 Prey Composition by Waveform
+
+Family-level prey composition comparing BP and TP waveform mormyrids globally.
+
+```{r level2-prey-composition}
+cat("=== LEVEL 2.1: PREY COMPOSITION BY WAVEFORM (FAMILY LEVEL) ===\n\n")
+
+# Aggregate to family level
+ps1_all_family <- aggregate_to_family(ps1_all_mormyrids)
+ps2_all_family <- aggregate_to_family(ps2_all_mormyrids)
+
+cat("Family-level aggregation:\n")
+cat("  PS1:", ntaxa(ps1_all_family), "families\n")
+cat("  PS2:", ntaxa(ps2_all_family), "families\n")
+
+# Calculate summary statistics by waveform type
+ps1_all_rel <- transform_sample_counts(ps1_all_family, function(x) x / sum(x) * 100)
+ps2_all_rel <- transform_sample_counts(ps2_all_family, function(x) x / sum(x) * 100)
+
+# Function to calculate family summary by waveform
+calc_family_summary_waveform <- function(ps_rel) {
+  ps_melt <- psmelt(ps_rel)
+  ps_melt$Family_clean <- sapply(ps_melt$Family, clean_family_name)
+
+  summary_table <- ps_melt %>%
+    group_by(Family_clean, Waveform_Type) %>%
+    summarise(
+      mean_pct = mean(Abundance),
+      se_pct = sd(Abundance) / sqrt(n()),
+      n_samples = n(),
+      .groups = "drop"
+    ) %>%
+    arrange(desc(mean_pct)) %>%
+    mutate(mean_se = paste0(round(mean_pct, 2), " ± ", round(se_pct, 2)))
+
+  return(summary_table)
+}
+
+summary_wave_ps1 <- calc_family_summary_waveform(ps1_all_rel)
+summary_wave_ps2 <- calc_family_summary_waveform(ps2_all_rel)
+
+cat("\nTop 15 prey families by waveform (Primer Set 1):\n")
+print(head(summary_wave_ps1, 30))
+
+cat("\nTop 15 prey families by waveform (Primer Set 2):\n")
+print(head(summary_wave_ps2, 30))
+
+# Identify top families across both primer sets for unified coloring
+combined_summary_wave <- bind_rows(
+  summary_wave_ps1 %>% mutate(Dataset = "PS1"),
+  summary_wave_ps2 %>% mutate(Dataset = "PS2")
+) %>%
+  group_by(Family_clean) %>%
+  summarise(Mean_Prop = mean(mean_pct), .groups = "drop") %>%
+  arrange(desc(Mean_Prop)) %>%
+  slice_head(n = 15)
+
+top_families_wave_unified <- combined_summary_wave$Family_clean
+
+cat("\nTop families (unified across both primer sets):\n")
+print(top_families_wave_unified)
+
+# Ensure all top families have colors assigned in global palette
+missing_families_wave <- setdiff(top_families_wave_unified, names(GLOBAL_FAMILY_COLORS))
+if (length(missing_families_wave) > 0) {
+  cat("Adding colors for", length(missing_families_wave), "families not in global palette:\n")
+  print(missing_families_wave)
+
+  # Find colors not yet used
+  used_colors <- GLOBAL_FAMILY_COLORS[names(GLOBAL_FAMILY_COLORS) != "Other"]
+  available_colors <- setdiff(distinct_colors, used_colors)
+
+  # Add colors for missing families
+  new_colors <- setNames(
+    available_colors[1:length(missing_families_wave)],
+    missing_families_wave
+  )
+  GLOBAL_FAMILY_COLORS <- c(GLOBAL_FAMILY_COLORS, new_colors)
+}
+
+# Create stacked bar plots with unified family list
+p1_wave <- plot_composition_unified(ps1_all_family,
+                                    group_var = "Waveform_Type",
+                                    families_to_show = top_families_wave_unified,
+                                    title = "Prey Composition by Waveform (PS1)")
+
+p2_wave <- plot_composition_unified(ps2_all_family,
+                                    group_var = "Waveform_Type",
+                                    families_to_show = top_families_wave_unified,
+                                    title = "Prey Composition by Waveform (PS2)")
+
+# Display side by side with unified legend using cowplot
+p1_wave_no_legend <- p1_wave + theme(legend.position = "none")
+p2_wave_no_legend <- p2_wave + theme(legend.position = "none")
+
+# Create dummy plot for unified legend
+dummy_data_wave <- data.frame(
+  x = rep("A", length(top_families_wave_unified) + 1),
+  y = rep(1, length(top_families_wave_unified) + 1),
+  Family = factor(c(top_families_wave_unified, "Other"),
+                  levels = c(top_families_wave_unified, "Other"))
+)
+
+p_dummy_wave <- ggplot(dummy_data_wave, aes(x = x, y = y, fill = Family)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = GLOBAL_FAMILY_COLORS,
+                    breaks = c(top_families_wave_unified, "Other"),
+                    name = "Prey Family",
+                    drop = FALSE) +
+  theme(legend.position = "bottom") +
+  guides(fill = guide_legend(ncol = 5, byrow = TRUE, title = "Prey Family"))
+
+legend_wave <- get_legend(p_dummy_wave)
+
+# Combine plots and legend
+plot_grid(
+  plot_grid(p1_wave_no_legend, p2_wave_no_legend, ncol = 2),
+  legend_wave,
+  ncol = 1,
+  rel_heights = c(1, 0.15)
+)
+```
+
+Summary table of top prey families by waveform:
+
+```{r level2-prey-table}
+# Create combined summary table
+top_families_wave <- summary_wave_ps1 %>%
+  pivot_wider(id_cols = Family_clean,
+              names_from = Waveform_Type,
+              values_from = c(mean_pct, se_pct),
+              values_fill = list(mean_pct = 0, se_pct = 0)) %>%
+  arrange(desc(pmax(mean_pct_BP, mean_pct_TP, na.rm = TRUE))) %>%
+  slice_head(n = 15)
+
+kable(top_families_wave,
+      caption = "Top 15 prey families by waveform type (mean $\\pm$ SE relative abundance \\%)",
+      digits = 2,
+      col.names = c("Family", "Mean \\% BP", "Mean \\% TP", "SE BP", "SE TP"),
+      booktabs = TRUE) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+```
+
+## 2.2 Alpha Diversity: BP vs. TP
+
+Shannon diversity analysis comparing BP and TP waveform mormyrids globally.
+
+```{r level2-alpha-diversity, fig.width=12, fig.height=6}
+cat("=== LEVEL 2.2: ALPHA DIVERSITY - BP vs TP ===\n\n")
+
+# Analyze alpha diversity for both primer sets
+alpha1_wave <- analyze_alpha_diversity(ps1_all_mormyrids, "Waveform_Type")
+alpha2_wave <- analyze_alpha_diversity(ps2_all_mormyrids, "Waveform_Type")
+
+# Calculate summary statistics
+cat("\n=== PRIMERSET 1 - BP vs TP Shannon Diversity ===\n")
+bp_mean_ps1 <- mean(alpha1_wave$diversity$Shannon[alpha1_wave$diversity$Waveform_Type == "BP"], na.rm = TRUE)
+bp_sd_ps1 <- sd(alpha1_wave$diversity$Shannon[alpha1_wave$diversity$Waveform_Type == "BP"], na.rm = TRUE)
+tp_mean_ps1 <- mean(alpha1_wave$diversity$Shannon[alpha1_wave$diversity$Waveform_Type == "TP"], na.rm = TRUE)
+tp_sd_ps1 <- sd(alpha1_wave$diversity$Shannon[alpha1_wave$diversity$Waveform_Type == "TP"], na.rm = TRUE)
+
+cat("BP Shannon (mean ± SD):", round(bp_mean_ps1, 3), "±", round(bp_sd_ps1, 3), "\n")
+cat("TP Shannon (mean ± SD):", round(tp_mean_ps1, 3), "±", round(tp_sd_ps1, 3), "\n")
+
+cat("\nTest type:", alpha1_wave$test_type, "\n")
+cat("Shapiro-Wilk p-value:", round(alpha1_wave$shapiro_p, 4), "\n")
+if (alpha1_wave$test_type == "Kruskal-Wallis") {
+  print(alpha1_wave$test)
+} else {
+  print(summary(alpha1_wave$test))
+}
+
+# Cohen's d effect size
+cat("\nEffect size (Cohen's d):\n")
+bp_vals_ps1 <- alpha1_wave$diversity$Shannon[alpha1_wave$diversity$Waveform_Type == "BP"]
+tp_vals_ps1 <- alpha1_wave$diversity$Shannon[alpha1_wave$diversity$Waveform_Type == "TP"]
+cohen_ps1 <- effsize::cohen.d(bp_vals_ps1, tp_vals_ps1, na.rm = TRUE)
+print(cohen_ps1)
+
+cat("\n=== PRIMERSET 2 - BP vs TP Shannon Diversity ===\n")
+bp_mean_ps2 <- mean(alpha2_wave$diversity$Shannon[alpha2_wave$diversity$Waveform_Type == "BP"], na.rm = TRUE)
+bp_sd_ps2 <- sd(alpha2_wave$diversity$Shannon[alpha2_wave$diversity$Waveform_Type == "BP"], na.rm = TRUE)
+tp_mean_ps2 <- mean(alpha2_wave$diversity$Shannon[alpha2_wave$diversity$Waveform_Type == "TP"], na.rm = TRUE)
+tp_sd_ps2 <- sd(alpha2_wave$diversity$Shannon[alpha2_wave$diversity$Waveform_Type == "TP"], na.rm = TRUE)
+
+cat("BP Shannon (mean ± SD):", round(bp_mean_ps2, 3), "±", round(bp_sd_ps2, 3), "\n")
+cat("TP Shannon (mean ± SD):", round(tp_mean_ps2, 3), "±", round(tp_sd_ps2, 3), "\n")
+
+cat("\nTest type:", alpha2_wave$test_type, "\n")
+cat("Shapiro-Wilk p-value:", round(alpha2_wave$shapiro_p, 4), "\n")
+if (alpha2_wave$test_type == "Kruskal-Wallis") {
+  print(alpha2_wave$test)
+} else {
+  print(summary(alpha2_wave$test))
+}
+
+# Cohen's d effect size
+cat("\nEffect size (Cohen's d):\n")
+bp_vals_ps2 <- alpha2_wave$diversity$Shannon[alpha2_wave$diversity$Waveform_Type == "BP"]
+tp_vals_ps2 <- alpha2_wave$diversity$Shannon[alpha2_wave$diversity$Waveform_Type == "TP"]
+cohen_ps2 <- effsize::cohen.d(bp_vals_ps2, tp_vals_ps2, na.rm = TRUE)
+print(cohen_ps2)
+
+# Comparative plot
+p_wave_alpha_comp <- plot_comparative_shannon(alpha1_wave$diversity,
+                                             alpha2_wave$diversity,
+                                             "Waveform_Type",
+                                             "Global BP vs TP Diet Diversity Comparison")
+print(p_wave_alpha_comp)
+```
+
+### Cross-Primer Correlation for Alpha Diversity
+
+```{r level2-alpha-correlation, fig.width=8, fig.height=6}
+# Correlate Shannon values for shared samples
+cor_wave_alpha <- correlate_shared_samples(alpha1_wave$diversity,
+                                          alpha2_wave$diversity)
+
+cat("\n=== GLOBAL WAVEFORM ALPHA DIVERSITY CORRELATION ===\n")
+cat("Shared samples:", cor_wave_alpha$n_shared, "\n")
+
+if (!is.null(cor_wave_alpha$cor_test)) {
+  cat("Pearson r:", round(cor_wave_alpha$cor_test$estimate, 3), "\n")
+  cat("95% CI: [", round(cor_wave_alpha$cor_test$conf.int[1], 3), ",",
+      round(cor_wave_alpha$cor_test$conf.int[2], 3), "]\n")
+  cat("P-value:", format.pval(cor_wave_alpha$cor_test$p.value, digits = 3), "\n")
+
+  # Scatterplot - get shared samples
+  shared_ids <- intersect(alpha1_wave$diversity$Sample_Name,
+                          alpha2_wave$diversity$Sample_Name)
+
+  # Filter to shared samples and match order
+  div1_shared <- alpha1_wave$diversity %>%
+    filter(Sample_Name %in% shared_ids) %>%
+    arrange(Sample_Name)
+  div2_shared <- alpha2_wave$diversity %>%
+    filter(Sample_Name %in% shared_ids) %>%
+    arrange(Sample_Name)
+
+  cor_df <- data.frame(
+    PS1_Shannon = div1_shared$Shannon,
+    PS2_Shannon = div2_shared$Shannon
+  )
+
+  p_alpha_cor <- ggplot(cor_df, aes(x = PS1_Shannon, y = PS2_Shannon)) +
+    geom_point(size = 3, alpha = 0.6, color = ps1_color) +
+    geom_smooth(method = "lm", se = TRUE, color = "black", linetype = "dashed") +
+    geom_abline(slope = 1, intercept = 0, linetype = "dotted", color = "gray50") +
+    theme_minimal() +
+    labs(title = "Global Waveform: Shannon Diversity Correlation",
+         subtitle = paste0("r = ", round(cor_wave_alpha$cor_test$estimate, 3),
+                          ", p ", format.pval(cor_wave_alpha$cor_test$p.value, digits = 2)),
+         x = "Primerset 1 Shannon", y = "Primerset 2 Shannon") +
+    coord_fixed()
+
+  print(p_alpha_cor)
+} else {
+  cat(cor_wave_alpha$message, "\n")
+}
+```
+
+## 2.3 Beta Diversity: BP vs. TP
+
+Bray-Curtis dissimilarity analysis with PERMANOVA testing for dietary differences between BP and TP waveform types globally.
+
+```{r level2-beta-diversity, fig.width=14, fig.height=6}
+cat("\n=== LEVEL 2.3: BETA DIVERSITY - BP vs TP ===\n\n")
+
+# Run beta diversity analyses
+beta1_wave <- run_beta_diversity_analysis(ps1_all_mormyrids, "~ Waveform_Type")
+beta2_wave <- run_beta_diversity_analysis(ps2_all_mormyrids, "~ Waveform_Type")
+
+cat("\n=== PRIMERSET 1 - Global Waveform PERMANOVA ===\n")
+print(beta1_wave$permanova)
+
+# Extract R² for reporting
+r2_ps1 <- beta1_wave$permanova$R2[1]
+p_ps1 <- beta1_wave$permanova$`Pr(>F)`[1]
+cat("\nR² =", round(r2_ps1, 4), ", p =", format.pval(p_ps1, digits = 3), "\n")
+
+cat("\n=== PRIMERSET 2 - Global Waveform PERMANOVA ===\n")
+print(beta2_wave$permanova)
+
+# Extract R² for reporting
+r2_ps2 <- beta2_wave$permanova$R2[1]
+p_ps2 <- beta2_wave$permanova$`Pr(>F)`[1]
+cat("\nR² =", round(r2_ps2, 4), ", p =", format.pval(p_ps2, digits = 3), "\n")
+
+# Faceted PCoA plot
+p_wave_pcoa <- plot_faceted_pcoa(beta1_wave, beta2_wave,
+                                color_var = "Waveform_Type",
+                                title = "Global Diet Composition: BP vs TP Waveform")
+print(p_wave_pcoa)
+```
+
+### Beta Diversity Cross-Validation (Mantel Test)
+
+```{r level2-beta-mantel}
+# Find shared Sample_Names between datasets
+samples1_wave <- beta1_wave$metadata$Sample_Name
+samples2_wave <- beta2_wave$metadata$Sample_Name
+shared_wave <- intersect(samples1_wave, samples2_wave)
+
+cat("\n=== GLOBAL WAVEFORM BETA DIVERSITY MANTEL TEST ===\n")
+cat("Shared Sample_Names:", length(shared_wave), "\n")
+
+if (length(shared_wave) >= 3) {
+  # Convert distance matrices to matrices with Sample_Name labels
+  dist1_mat <- as.matrix(beta1_wave$distance)
+  dist2_mat <- as.matrix(beta2_wave$distance)
+
+  # Relabel with Sample_Names
+  rownames(dist1_mat) <- beta1_wave$metadata$Sample_Name
+  colnames(dist1_mat) <- beta1_wave$metadata$Sample_Name
+  rownames(dist2_mat) <- beta2_wave$metadata$Sample_Name
+  colnames(dist2_mat) <- beta2_wave$metadata$Sample_Name
+
+  # Subset to shared Sample_Names (automatically aligned)
+  dist1_shared <- as.dist(dist1_mat[shared_wave, shared_wave])
+  dist2_shared <- as.dist(dist2_mat[shared_wave, shared_wave])
+
+  # Mantel test
+  mantel_wave <- run_mantel_test(dist1_shared, dist2_shared)
+
+  cat("\nMantel statistic (r):", round(mantel_wave$statistic, 3), "\n")
+  cat("P-value:", format.pval(mantel_wave$signif, digits = 3), "\n")
+  cat("Interpretation:",
+      ifelse(mantel_wave$statistic > 0.5, "Strong concordance",
+             ifelse(mantel_wave$statistic > 0.3, "Moderate concordance",
+                    "Weak concordance")), "\n")
+} else {
+  cat("Insufficient shared samples for Mantel test.\n")
+  mantel_wave <- NULL
+}
+```
+
+## 2.4 SIMPER Analysis - Waveform
+
+Similarity Percentage (SIMPER) analysis identifies which prey families contribute most to dietary differences between BP and TP waveform types.
+
+```{r level2-simper, fig.width=10, fig.height=8}
+cat("\n=== LEVEL 2.4: SIMPER ANALYSIS - WAVEFORM ===\n\n")
+
+# Function to run SIMPER and create visualization
+run_simper_waveform <- function(ps, primerset_name) {
+
+  cat("\n", primerset_name, ":\n", sep = "")
+
+  # Get OTU table (samples as rows, taxa as columns)
+  otu_mat <- as.matrix(otu_table(ps))
+  if (taxa_are_rows(ps)) {
+    otu_mat <- t(otu_mat)
+  }
+
+  # Get metadata
+  meta <- data.frame(sample_data(ps))
+
+  # Run SIMPER
+  simper_result <- vegan::simper(otu_mat, meta$Waveform_Type, permutations = 999)
+
+  cat("\nSIMPER analysis complete\n")
+
+  # Extract results for BP vs TP comparison
+  # There should be only one comparison (BP_TP or TP_BP)
+  comparison_name <- names(simper_result)[1]
+  comparison_name_clean <- gsub("_", " vs ", comparison_name)
+  comp <- simper_result[[comparison_name]]
+
+  cat("\nComparison:", comparison_name_clean, "\n")
+
+  # Extract overall dissimilarity
+  overall_diss <- comp$overall
+  cat("Overall average dissimilarity:", round(overall_diss, 3), "\n")
+
+  # Build data frame from simper result
+  comparison_data <- data.frame(
+    species = comp$species,
+    average = comp$average,
+    sd = comp$sd,
+    ratio = comp$ratio,
+    ava = comp$ava,
+    avb = comp$avb,
+    p = comp$p,
+    stringsAsFactors = FALSE
+  )
+
+  # Calculate contribution percentage (average contribution / overall dissimilarity)
+  comparison_data$contr <- comparison_data$average / overall_diss
+
+  # Sort by contribution (descending)
+  comparison_data <- comparison_data[order(-comparison_data$contr), ]
+  rownames(comparison_data) <- comparison_data$species
+
+  # Calculate cumulative sum
+  comparison_data$cumsum <- cumsum(comparison_data$contr)
+
+  # Get top contributors (cumulative contribution up to 70%)
+  top_taxa <- comparison_data[comparison_data$cumsum <= 0.70, ]
+
+  # If nothing meets 70%, take top 15
+  if (nrow(top_taxa) == 0) {
+    top_taxa <- head(comparison_data, 15)
+  }
+
+  # Get taxonomy for these ASVs
+  tax_df <- as.data.frame(tax_table(ps))
+  top_taxa$ASV <- rownames(top_taxa)
+
+  # Add taxonomic names (Family level)
+  top_taxa$Family <- sapply(top_taxa$ASV, function(asv) {
+    if (asv %in% rownames(tax_df)) {
+      fam <- tax_df[asv, "Family"]
+      if (is.na(fam) || fam == "") {
+        return(tax_df[asv, "Order"])
+      }
+      return(clean_family_name(fam))
+    }
+    return("Unknown")
+  })
+
+  # Aggregate ASVs by Family for plotting
+  family_aggregated <- top_taxa %>%
+    group_by(Family) %>%
+    summarise(
+      contr = sum(contr),
+      average = sum(average),
+      n_asvs = n(),
+      .groups = "drop"
+    ) %>%
+    arrange(desc(contr))
+
+  # Print table (ASV-level detail)
+  display_table <- top_taxa[, c("Family", "average", "sd", "ratio",
+                                "ava", "avb", "contr", "cumsum")]
+
+  # Round numeric columns
+  display_table[, c("average", "sd", "ratio", "ava", "avb",
+                    "contr", "cumsum")] <-
+    round(display_table[, c("average", "sd", "ratio", "ava", "avb",
+                            "contr", "cumsum")], 3)
+
+  cat(paste0("\n#### SIMPER: ", comparison_name_clean, " (", primerset_name, ")\n\n"))
+  # Limit to top 10 rows for space
+  display_table_top <- head(display_table, 10)
+  kable(display_table_top,
+              caption = paste0("SIMPER: ", comparison_name_clean, " (", primerset_name, ") - Top 10"),
+              row.names = FALSE,
+              booktabs = TRUE) %>%
+          kable_styling(latex_options = c("striped", "HOLD_position"),
+                        bootstrap_options = c("striped", "hover"),
+                        full_width = FALSE, font_size = 8)
+
+  # Create bar plot of contribution percentage - FAMILY LEVEL
+  plot_data <- head(family_aggregated, 15)
+
+  # Create factor for ordering (highest contribution at top)
+  plot_data$Family <- factor(plot_data$Family,
+                             levels = rev(plot_data$Family))
+
+  p <- ggplot(plot_data, aes(x = contr * 100, y = Family)) +
+    geom_bar(stat = "identity", fill = "#0072B2", alpha = 0.7) +
+    theme_minimal() +
+    labs(title = paste0("Top Prey Families Contributing to BP vs TP Dissimilarity (", primerset_name, ")"),
+         x = "Contribution to Dissimilarity (%)",
+         y = "Prey Family")
+
+  return(list(simper = simper_result, plot = p))
+}
+
+# Run SIMPER for both primer sets
+simper_wave_ps1 <- run_simper_waveform(ps1_all_mormyrids, "PRIMERSET 1")
+simper_wave_ps2 <- run_simper_waveform(ps2_all_mormyrids, "PRIMERSET 2")
+
+# Display plots
+print(simper_wave_ps1$plot)
+print(simper_wave_ps2$plot)
+```
+
+---
+
+# LEVEL 3: Paramormyrops kingsleyae - General Population Factors
+
+**Biological context:** ~47 *P. kingsleyae* individuals from 4 rivers (2 regions × 2 waveform types). This level examines how sex, body size, parasitism, and geography affect diet before testing the core BP vs TP question in Level 4.
+
+## 3.1 Prey Composition by Population
+
+Family-level prey composition across the four river populations, organized by region and waveform type to facilitate comparisons.
+
+```{r level3-prey-composition, fig.width=14, fig.height=10}
+cat("=== LEVEL 3.1: PREY COMPOSITION BY POPULATION ===\n\n")
+
+# Aggregate to family level
+ps1_pk_family <- aggregate_to_family(ps1_pk)
+ps2_pk_family <- aggregate_to_family(ps2_pk)
+
+cat("Family-level aggregation (P. kingsleyae):\n")
+cat("  PS1:", ntaxa(ps1_pk_family), "families\n")
+cat("  PS2:", ntaxa(ps2_pk_family), "families\n")
+
+# Add Region variable for faceting
+add_region_variable <- function(ps) {
+  meta <- data.frame(sample_data(ps))
+
+  # Define regions based on locality
+  meta$Region <- ifelse(meta$Locality_Name %in% c("Bambomo", "Apassa"),
+                        "South", "North")
+
+  # Update sample data
+  sample_data(ps) <- meta
+  return(ps)
+}
+
+ps1_pk_family <- add_region_variable(ps1_pk_family)
+ps2_pk_family <- add_region_variable(ps2_pk_family)
+
+# Create 4-panel stacked bar chart function
+create_4panel_composition <- function(ps_family, primerset_name, top_n = 10,
+                                      families_to_show = NULL,
+                                      use_global_colors = TRUE) {
+
+  # Convert to relative abundance
+  ps_rel <- transform_sample_counts(ps_family, function(x) x / sum(x))
+
+  # Melt to long format
+  ps_melt <- psmelt(ps_rel)
+
+  # Clean family names
+  ps_melt$Family_clean <- sapply(ps_melt$Family, clean_family_name)
+
+  # Identify top N families by mean abundance
+  if (is.null(families_to_show)) {
+    top_families <- ps_melt %>%
+      group_by(Family_clean) %>%
+      summarise(mean_abund = mean(Abundance), .groups = "drop") %>%
+      arrange(desc(mean_abund)) %>%
+      slice_head(n = top_n) %>%
+      pull(Family_clean)
+  } else {
+    top_families <- families_to_show
+  }
+
+  # Aggregate by Locality_Name and Family_clean (sum across samples)
+  ps_agg <- ps_melt %>%
+    group_by(Locality_Name, Region, Waveform_Type, Family_clean) %>%
+    summarise(Abundance = sum(Abundance), .groups = "drop")
+
+  # Normalize within each Locality_Name so each bar sums to 1 (100%)
+  ps_agg <- ps_agg %>%
+    group_by(Locality_Name) %>%
+    mutate(RelAbund = Abundance / sum(Abundance)) %>%
+    ungroup()
+
+  # Categorize families into top families vs "Other"
+  ps_final <- ps_agg %>%
+    mutate(Family_display = ifelse(Family_clean %in% top_families,
+                                   Family_clean, "Other")) %>%
+    group_by(Locality_Name, Region, Waveform_Type, Family_display) %>%
+    summarise(RelAbund = sum(RelAbund), .groups = "drop")
+
+  # Reorder for plotting
+  ps_final$Family_display <- factor(ps_final$Family_display,
+                                     levels = c(top_families, "Other"))
+
+  # Create plot with facet_grid(Region ~ Waveform_Type)
+  p <- ggplot(ps_final, aes(x = Locality_Name, y = RelAbund,
+                            fill = Family_display)) +
+    geom_bar(stat = "identity", position = "stack") +
+    facet_grid(Region ~ Waveform_Type, scales = "free_x", space = "free_x") +
+    theme_minimal() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      legend.position = "right"
+    ) +
+    labs(
+      title = paste("P. kingsleyae Prey Composition by Population -", primerset_name),
+      subtitle = "Organized by Region (North/South) and Waveform (BP/TP)",
+      x = "River",
+      y = "Relative Abundance"
+    ) +
+    scale_y_continuous(labels = scales::percent)
+
+  # Add color scale
+  if (use_global_colors) {
+    p <- p + scale_fill_manual(values = GLOBAL_FAMILY_COLORS,
+                               name = "Prey Family",
+                               breaks = c(top_families, "Other"),
+                               drop = FALSE)
+  } else {
+    p <- p + scale_fill_viridis_d(option = "turbo", name = "Prey Family")
+  }
+
+  return(p)
+}
+
+# Identify top families across both primer sets for unified coloring
+# Calculate summaries for both datasets
+ps1_pk_rel <- transform_sample_counts(ps1_pk_family, function(x) x / sum(x) * 100)
+ps2_pk_rel <- transform_sample_counts(ps2_pk_family, function(x) x / sum(x) * 100)
+
+# Get family summaries
+get_family_summary_pk <- function(ps_rel) {
+  ps_melt <- psmelt(ps_rel)
+  ps_melt$Family_clean <- sapply(ps_melt$Family, clean_family_name)
+
+  summary_table <- ps_melt %>%
+    group_by(Family_clean) %>%
+    summarise(
+      mean_pct = mean(Abundance),
+      sd_pct = sd(Abundance),
+      n_samples = n(),
+      .groups = "drop"
+    ) %>%
+    arrange(desc(mean_pct)) %>%
+    mutate(mean_sd = paste0(round(mean_pct, 2), " ± ", round(sd_pct, 2)))
+
+  return(summary_table)
+}
+
+summary_pk_ps1 <- get_family_summary_pk(ps1_pk_rel)
+summary_pk_ps2 <- get_family_summary_pk(ps2_pk_rel)
+
+# Combine and get top families
+combined_summary_pk <- bind_rows(
+  summary_pk_ps1 %>% mutate(Dataset = "PS1"),
+  summary_pk_ps2 %>% mutate(Dataset = "PS2")
+) %>%
+  group_by(Family_clean) %>%
+  summarise(Mean_Prop = mean(mean_pct), .groups = "drop") %>%
+  arrange(desc(Mean_Prop)) %>%
+  slice_head(n = 10)
+
+top_families_pk_unified <- combined_summary_pk$Family_clean
+
+cat("\nTop families for P. kingsleyae (unified across both primer sets):\n")
+print(top_families_pk_unified)
+
+# Ensure all top families have colors assigned in global palette
+missing_families_pk <- setdiff(top_families_pk_unified, names(GLOBAL_FAMILY_COLORS))
+if (length(missing_families_pk) > 0) {
+  cat("Adding colors for", length(missing_families_pk), "families not in global palette:\n")
+  print(missing_families_pk)
+
+  # Find colors not yet used
+  used_colors <- GLOBAL_FAMILY_COLORS[names(GLOBAL_FAMILY_COLORS) != "Other"]
+  available_colors <- setdiff(distinct_colors, used_colors)
+
+  # Add colors for missing families
+  new_colors <- setNames(
+    available_colors[1:length(missing_families_pk)],
+    missing_families_pk
+  )
+  GLOBAL_FAMILY_COLORS <- c(GLOBAL_FAMILY_COLORS, new_colors)
+}
+
+# Create plots for both primer sets with unified families
+p_comp_ps1 <- create_4panel_composition(ps1_pk_family, "Primerset 1",
+                                        families_to_show = top_families_pk_unified,
+                                        use_global_colors = TRUE)
+p_comp_ps2 <- create_4panel_composition(ps2_pk_family, "Primerset 2",
+                                        families_to_show = top_families_pk_unified,
+                                        use_global_colors = TRUE)
+
+print(p_comp_ps1)
+cat("\n\n")
+print(p_comp_ps2)
+
+# Summary table by river
+cat("\n=== SUMMARY BY RIVER ===\n")
+pk_meta <- data.frame(sample_data(ps1_pk))
+pk_summary <- pk_meta %>%
+  group_by(Locality_Name, Region, Waveform_Type) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  arrange(Region, Waveform_Type)
+
+kable(pk_summary,
+      caption = "P. kingsleyae sampling by river",
+      col.names = c("River", "Region", "Waveform", "N"),
+      booktabs = TRUE) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"),
+                full_width = FALSE)
+```
+
+## 3.2 Sex Effects on Shannon Diversity
+
+Test for sex differences in diet diversity using ANCOVA with body size as a covariate to account for sexual size dimorphism.
+
+```{r level3-sex-effects, fig.width=12, fig.height=10}
+cat("\n=== LEVEL 3.2: SEX EFFECTS ON SHANNON DIVERSITY ===\n\n")
+
+# Prepare data with sex and size
+prepare_sex_size_data <- function(ps, size_col = "SL") {
+  meta <- as.data.frame(sample_data(ps))
+  div <- estimate_richness(ps, measures = c("Shannon"))
+
+  div$Sex <- meta$Sex
+  div$body_size <- as.numeric(meta[[size_col]])
+  div$Sample_Name <- meta$Sample_Name
+  div$Locality_Name <- meta$Locality_Name
+  div$Waveform_Type <- meta$Waveform_Type
+
+  # Remove missing data
+  div <- div[!is.na(div$Sex) & !is.na(div$body_size), ]
+
+  return(div)
+}
+
+div_ps1_pk <- prepare_sex_size_data(ps1_pk, "SL")
+div_ps2_pk <- prepare_sex_size_data(ps2_pk, "SL")
+
+cat("Sample sizes (P. kingsleyae):\n")
+cat("  PS1:", nrow(div_ps1_pk), "samples\n")
+if (nrow(div_ps1_pk) > 0) {
+  cat("  PS1 sex distribution:\n")
+  print(table(div_ps1_pk$Sex))
+}
+
+cat("\n  PS2:", nrow(div_ps2_pk), "samples\n")
+if (nrow(div_ps2_pk) > 0) {
+  cat("  PS2 sex distribution:\n")
+  print(table(div_ps2_pk$Sex))
+}
+
+# Filter to adults only for sex comparison (exclude juveniles)
+div_ps1_pk_adults <- div_ps1_pk[div_ps1_pk$Sex %in% c("Male", "Female"), ]
+div_ps2_pk_adults <- div_ps2_pk[div_ps2_pk$Sex %in% c("Male", "Female"), ]
+
+cat("\nAdult samples (excluding juveniles):\n")
+cat("  PS1:", nrow(div_ps1_pk_adults), "adults\n")
+cat("  PS2:", nrow(div_ps2_pk_adults), "adults\n")
+
+# Check correlation between sex and size in adults
+if (nrow(div_ps1_pk_adults) > 5 && length(unique(div_ps1_pk_adults$Sex)) == 2) {
+  cat("\n=== SEX-SIZE CORRELATION (P. kingsleyae ADULTS) ===\n")
+
+  # PS1
+  cat("\nPRIMERSET 1:\n")
+  cat("Body size by sex (mean ± SD):\n")
+  size_by_sex_ps1 <- aggregate(body_size ~ Sex, data = div_ps1_pk_adults,
+                                FUN = function(x) {
+                                  paste0(round(mean(x), 1), " ± ",
+                                         round(sd(x), 1))
+                                })
+  print(size_by_sex_ps1)
+
+  size_test_ps1 <- t.test(body_size ~ Sex, data = div_ps1_pk_adults)
+  cat("t-test p-value:", format.pval(size_test_ps1$p.value, digits = 3), "\n")
+
+  # PS2
+  if (nrow(div_ps2_pk_adults) > 5 && length(unique(div_ps2_pk_adults$Sex)) == 2) {
+    cat("\nPRIMERSET 2:\n")
+    cat("Body size by sex (mean ± SD):\n")
+    size_by_sex_ps2 <- aggregate(body_size ~ Sex, data = div_ps2_pk_adults,
+                                  FUN = function(x) {
+                                    paste0(round(mean(x), 1), " ± ",
+                                           round(sd(x), 1))
+                                  })
+    print(size_by_sex_ps2)
+
+    size_test_ps2 <- t.test(body_size ~ Sex, data = div_ps2_pk_adults)
+    cat("t-test p-value:", format.pval(size_test_ps2$p.value, digits = 3), "\n")
+  }
+
+  # ANCOVA models (sex + body size)
+  cat("\n=== ANCOVA MODELS (ADULTS ONLY) ===\n")
+  cat("Model: Shannon ~ Sex + body_size + Sex:body_size\n\n")
+
+  # PS1 ANCOVA
+  cat("PRIMERSET 1:\n")
+  ancova_sex_ps1 <- lm(Shannon ~ Sex + body_size + Sex:body_size,
+                       data = div_ps1_pk_adults)
+  print(summary(ancova_sex_ps1))
+  cat("\nANOVA table:\n")
+  print(anova(ancova_sex_ps1))
+
+  # PS2 ANCOVA
+  if (nrow(div_ps2_pk_adults) > 5 && length(unique(div_ps2_pk_adults$Sex)) == 2) {
+    cat("\n\nPRIMERSET 2:\n")
+    ancova_sex_ps2 <- lm(Shannon ~ Sex + body_size + Sex:body_size,
+                         data = div_ps2_pk_adults)
+    print(summary(ancova_sex_ps2))
+    cat("\nANOVA table:\n")
+    print(anova(ancova_sex_ps2))
+  }
+
+  # Visualization
+  div_ps1_pk_adults$PrimerSet <- "Primerset 1"
+  div_ps2_pk_adults$PrimerSet <- "Primerset 2"
+  div_combined_adults <- bind_rows(div_ps1_pk_adults, div_ps2_pk_adults)
+
+  # Also prepare all-individuals dataset
+  div_ps1_pk$PrimerSet <- "Primerset 1"
+  div_ps2_pk$PrimerSet <- "Primerset 2"
+  div_combined_all <- bind_rows(div_ps1_pk, div_ps2_pk)
+
+  # Panel 1: Shannon by sex (adults only)
+  p_sex <- ggplot(div_combined_adults,
+                  aes(x = Sex, y = Shannon, fill = Sex)) +
+    geom_boxplot(alpha = 0.7) +
+    geom_jitter(width = 0.2, alpha = 0.5) +
+    facet_wrap(~ PrimerSet) +
+    theme_minimal() +
+    labs(title = "Diet Diversity by Sex (P. kingsleyae Adults)",
+         x = "Sex", y = "Shannon Diversity") +
+    theme(legend.position = "none")
+
+  # Panel 2: Body size by sex (adults only)
+  p_size_sex <- ggplot(div_combined_adults,
+                       aes(x = Sex, y = body_size, fill = Sex)) +
+    geom_boxplot(alpha = 0.7) +
+    geom_jitter(width = 0.2, alpha = 0.5) +
+    facet_wrap(~ PrimerSet) +
+    theme_minimal() +
+    labs(title = "Body Size by Sex (P. kingsleyae Adults)",
+         x = "Sex",
+         y = "Standard Length (mm)") +
+    theme(legend.position = "none")
+
+  # Panel 3: Shannon vs body size with sex indicated
+  p_scatter <- ggplot(div_combined_all,
+                      aes(x = body_size, y = Shannon, color = Sex)) +
+    geom_point(alpha = 0.6, size = 2) +
+    geom_smooth(method = "lm", se = TRUE) +
+    facet_wrap(~ PrimerSet) +
+    theme_minimal() +
+    labs(title = "Diet Diversity vs Body Size (All P. kingsleyae)",
+         x = "Standard Length (mm)",
+         y = "Shannon Diversity",
+         color = "Sex")
+
+  # Combine plots
+  print(p_sex / p_size_sex / p_scatter)
+
+} else {
+  cat("Insufficient data for sex analysis\n")
+}
+```
+
+## 3.3 Body Size Effects
+
+Test for linear relationship between body size and diet diversity across all *P. kingsleyae* individuals.
+
+```{r level3-body-size, fig.width=10, fig.height=6}
+cat("\n=== LEVEL 3.3: BODY SIZE EFFECTS ===\n")
+cat("Testing Shannon ~ body_size for all P. kingsleyae individuals\n\n")
+
+# PS1
+cat("PRIMERSET 1:\n")
+lm_size_ps1 <- lm(Shannon ~ body_size, data = div_ps1_pk)
+print(summary(lm_size_ps1))
+cat("\nPearson correlation:\n")
+cor_size_ps1 <- cor.test(div_ps1_pk$Shannon, div_ps1_pk$body_size)
+cat("  r:", round(cor_size_ps1$estimate, 3), "\n")
+cat("  95% CI: [", round(cor_size_ps1$conf.int[1], 3), ",",
+    round(cor_size_ps1$conf.int[2], 3), "]\n")
+cat("  P-value:", format.pval(cor_size_ps1$p.value, digits = 3), "\n")
+
+# PS2
+cat("\n\nPRIMERSET 2:\n")
+lm_size_ps2 <- lm(Shannon ~ body_size, data = div_ps2_pk)
+print(summary(lm_size_ps2))
+cat("\nPearson correlation:\n")
+cor_size_ps2 <- cor.test(div_ps2_pk$Shannon, div_ps2_pk$body_size)
+cat("  r:", round(cor_size_ps2$estimate, 3), "\n")
+cat("  95% CI: [", round(cor_size_ps2$conf.int[1], 3), ",",
+    round(cor_size_ps2$conf.int[2], 3), "]\n")
+cat("  P-value:", format.pval(cor_size_ps2$p.value, digits = 3), "\n")
+
+# Scatterplot with regression line
+if (exists("div_combined_all")) {
+  p_size_effect <- ggplot(div_combined_all,
+                          aes(x = body_size, y = Shannon)) +
+    geom_point(aes(color = Sex), alpha = 0.6, size = 3) +
+    geom_smooth(method = "lm", se = TRUE, color = "black",
+                linetype = "dashed", linewidth = 1) +
+    facet_wrap(~ PrimerSet) +
+    theme_minimal() +
+    labs(title = "Body Size Effect on Diet Diversity (P. kingsleyae)",
+         subtitle = paste0("PS1: r = ", round(cor_size_ps1$estimate, 3),
+                          ", p ", format.pval(cor_size_ps1$p.value, digits = 2),
+                          " | PS2: r = ", round(cor_size_ps2$estimate, 3),
+                          ", p ", format.pval(cor_size_ps2$p.value, digits = 2)),
+         x = "Standard Length (mm)",
+         y = "Shannon Diversity",
+         color = "Sex")
+
+  print(p_size_effect)
+}
+```
+
+## 3.4 Parasitism Effects
+
+Test whether parasitism affects diet diversity and composition in *P. kingsleyae*.
+
+```{r level3-parasitism, fig.width=12, fig.height=8}
+cat("\n=== LEVEL 3.4: PARASITISM EFFECTS ===\n\n")
+
+# Check if parasitism data exists
+check_parasitism <- function(ps) {
+  meta <- data.frame(sample_data(ps))
+
+  # Look for parasite-related columns
+  parasite_cols <- grep("parasite|parasit", names(meta),
+                        ignore.case = TRUE, value = TRUE)
+
+  if (length(parasite_cols) == 0) {
+    cat("No parasitism columns found in metadata\n")
+    return(NULL)
+  }
+
+  cat("Found parasitism columns:", paste(parasite_cols, collapse = ", "), "\n")
+  return(parasite_cols)
+}
+
+# Check both primer sets
+cat("PRIMERSET 1:\n")
+parasite_cols_ps1 <- check_parasitism(ps1_pk)
+
+cat("\nPRIMERSET 2:\n")
+parasite_cols_ps2 <- check_parasitism(ps2_pk)
+
+# Analyze parasitism effects if data exists
+if (!is.null(parasite_cols_ps1) && length(parasite_cols_ps1) > 0) {
+
+  # Use the first parasite column found
+  parasite_col <- parasite_cols_ps1[1]
+  cat("\n=== ANALYZING PARASITISM USING COLUMN:", parasite_col, "===\n\n")
+
+  # Prepare data with parasitism
+  prepare_parasite_data <- function(ps, parasite_col) {
+    meta <- as.data.frame(sample_data(ps))
+    div <- estimate_richness(ps, measures = c("Shannon"))
+
+    div$Parasite <- meta[[parasite_col]]
+    div$body_size <- as.numeric(meta$SL)
+    div$Sample_Name <- meta$Sample_Name
+    div$Sex <- meta$Sex
+
+    # Remove missing data
+    div <- div[!is.na(div$Parasite) & !is.na(div$body_size), ]
+
+    # Standardize parasite values (yes/no, presence/absence, etc.)
+    div$Parasite <- tolower(as.character(div$Parasite))
+    div$Parasite <- ifelse(div$Parasite %in% c("yes", "present", "1", "true"),
+                           "Yes",
+                           ifelse(div$Parasite %in% c("no", "absent", "0", "false"),
+                                 "No", div$Parasite))
+
+    return(div)
+  }
+
+  div_para_ps1 <- prepare_parasite_data(ps1_pk, parasite_col)
+  div_para_ps2 <- prepare_parasite_data(ps2_pk, parasite_col)
+
+  cat("PRIMERSET 1:\n")
+  cat("  Samples with parasite data:", nrow(div_para_ps1), "\n")
+  cat("  Parasitism status:\n")
+  print(table(div_para_ps1$Parasite))
+
+  cat("\nPRIMERSET 2:\n")
+  cat("  Samples with parasite data:", nrow(div_para_ps2), "\n")
+  cat("  Parasitism status:\n")
+  print(table(div_para_ps2$Parasite))
+
+  # Check if parasitism is categorical or continuous
+  is_categorical <- length(unique(div_para_ps1$Parasite)) < 10
+
+  if (is_categorical) {
+    cat("\n=== CATEGORICAL PARASITISM ANALYSIS ===\n")
+
+    # Kruskal-Wallis test for alpha diversity
+    cat("\nAlpha Diversity (Shannon) by Parasitism Status:\n\n")
+
+    # PS1
+    cat("PRIMERSET 1:\n")
+    kw_ps1 <- kruskal.test(Shannon ~ Parasite, data = div_para_ps1)
+    print(kw_ps1)
+
+    # Summary statistics
+    para_summary_ps1 <- div_para_ps1 %>%
+      group_by(Parasite) %>%
+      summarise(
+        n = n(),
+        mean_shannon = mean(Shannon, na.rm = TRUE),
+        sd_shannon = sd(Shannon, na.rm = TRUE),
+        .groups = "drop"
+      )
+    print(para_summary_ps1)
+
+    # PS2
+    cat("\nPRIMERSET 2:\n")
+    kw_ps2 <- kruskal.test(Shannon ~ Parasite, data = div_para_ps2)
+    print(kw_ps2)
+
+    para_summary_ps2 <- div_para_ps2 %>%
+      group_by(Parasite) %>%
+      summarise(
+        n = n(),
+        mean_shannon = mean(Shannon, na.rm = TRUE),
+        sd_shannon = sd(Shannon, na.rm = TRUE),
+        .groups = "drop"
+      )
+    print(para_summary_ps2)
+
+    # ANCOVA controlling for body size
+    cat("\n=== ANCOVA: Shannon ~ Parasite + body_size ===\n\n")
+
+    # PS1
+    cat("PRIMERSET 1:\n")
+    ancova_para_ps1 <- lm(Shannon ~ Parasite + body_size, data = div_para_ps1)
+    print(summary(ancova_para_ps1))
+    cat("\nANOVA table:\n")
+    print(anova(ancova_para_ps1))
+
+    # PS2
+    cat("\n\nPRIMERSET 2:\n")
+    ancova_para_ps2 <- lm(Shannon ~ Parasite + body_size, data = div_para_ps2)
+    print(summary(ancova_para_ps2))
+    cat("\nANOVA table:\n")
+    print(anova(ancova_para_ps2))
+
+  } else {
+    cat("\n=== CONTINUOUS PARASITISM ANALYSIS ===\n")
+    cat("Parasitism appears to be continuous. Using correlation/regression.\n\n")
+
+    # Convert to numeric if possible
+    div_para_ps1$Parasite_numeric <- as.numeric(div_para_ps1$Parasite)
+    div_para_ps2$Parasite_numeric <- as.numeric(div_para_ps2$Parasite)
+
+    # ANCOVA with continuous parasite measure
+    cat("PRIMERSET 1:\n")
+    ancova_para_ps1 <- lm(Shannon ~ Parasite_numeric + body_size,
+                         data = div_para_ps1)
+    print(summary(ancova_para_ps1))
+
+    cat("\n\nPRIMERSET 2:\n")
+    ancova_para_ps2 <- lm(Shannon ~ Parasite_numeric + body_size,
+                         data = div_para_ps2)
+    print(summary(ancova_para_ps2))
+  }
+
+  # Beta diversity analysis
+  cat("\n\n=== BETA DIVERSITY: PERMANOVA ===\n")
+  cat("Testing: Bray-Curtis ~ Parasitism\n\n")
+
+  # Create phyloseq subsets with parasitism metadata
+  prepare_parasite_phyloseq <- function(ps, parasite_col) {
+    meta <- data.frame(sample_data(ps))
+
+    # Standardize parasite column
+    meta$Parasite_status <- tolower(as.character(meta[[parasite_col]]))
+    meta$Parasite_status <- ifelse(
+      meta$Parasite_status %in% c("yes", "present", "1", "true"),
+      "Yes",
+      ifelse(meta$Parasite_status %in% c("no", "absent", "0", "false"),
+             "No", meta$Parasite_status)
+    )
+
+    # Update sample data
+    sample_data(ps) <- meta
+
+    # Remove samples with missing parasite data
+    ps_filt <- subset_samples(ps, !is.na(Parasite_status) &
+                                   Parasite_status != "")
+
+    return(ps_filt)
+  }
+
+  ps1_pk_para <- prepare_parasite_phyloseq(ps1_pk, parasite_col)
+  ps2_pk_para <- prepare_parasite_phyloseq(ps2_pk, parasite_col)
+
+  # Run beta diversity analysis
+  if (nsamples(ps1_pk_para) > 5) {
+    cat("PRIMERSET 1:\n")
+    beta_para_ps1 <- run_beta_diversity_analysis(ps1_pk_para, "~ Parasite_status")
+    print(beta_para_ps1$permanova)
+
+    cat("\n\nPRIMERSET 2:\n")
+    beta_para_ps2 <- run_beta_diversity_analysis(ps2_pk_para, "~ Parasite_status")
+    print(beta_para_ps2$permanova)
+  } else {
+    cat("Insufficient samples with parasite data for beta diversity analysis\n")
+  }
+
+  # Visualization
+  div_para_ps1$PrimerSet <- "Primerset 1"
+  div_para_ps2$PrimerSet <- "Primerset 2"
+  div_para_combined <- bind_rows(div_para_ps1, div_para_ps2)
+
+  # Boxplot of Shannon by parasitism status
+  p_para_box <- ggplot(div_para_combined,
+                       aes(x = Parasite, y = Shannon, fill = Parasite)) +
+    geom_boxplot(alpha = 0.7) +
+    geom_jitter(width = 0.2, alpha = 0.5, size = 2) +
+    facet_wrap(~ PrimerSet) +
+    theme_minimal() +
+    labs(title = "Diet Diversity by Parasitism Status (P. kingsleyae)",
+         x = "Parasitism Status",
+         y = "Shannon Diversity") +
+    theme(legend.position = "none")
+
+  # Scatterplot of Shannon vs body size colored by parasitism
+  p_para_scatter <- ggplot(div_para_combined,
+                           aes(x = body_size, y = Shannon, color = Parasite)) +
+    geom_point(alpha = 0.6, size = 3) +
+    geom_smooth(method = "lm", se = TRUE) +
+    facet_wrap(~ PrimerSet) +
+    theme_minimal() +
+    labs(title = "Body Size, Parasitism, and Diet Diversity",
+         x = "Standard Length (mm)",
+         y = "Shannon Diversity",
+         color = "Parasitism")
+
+  print(p_para_box / p_para_scatter)
+
+} else {
+  cat("\nNo parasitism data available in metadata. Skipping analysis.\n")
+}
+```
+
+---
+
+# LEVEL 4: BP vs. TP Within Paramormyrops kingsleyae
+
+**The Core Question: Does EOD waveform associate with dietary niche partitioning?**
+
+**Design consideration:** Waveform is confounded with geography in this dataset. BP waveforms are found in southern rivers (Bambomo, Apassa), while TP waveforms are found in northern rivers (Mengono, Iboundji). This level implements multiple analytical approaches to separate geographic effects from waveform effects.
+
+**Analysis strategy:**
+1. Two-way ANOVA/PERMANOVA (Region × Waveform) to assess relative contributions
+2. Variance partitioning to quantify pure vs. shared effects
+3. Waveform similarity across sites to test whether same-waveform fish in different regions are more similar than different-waveform fish in the same region
+4. Prey selectivity analysis to distinguish composition differences from selection behavior
+
+## 4.1 Prey Composition: BP vs. TP Emphasis
+
+This section reuses the 4-panel visualization from 3.1 but emphasizes the BP vs. TP comparison within each region.
+
+```{r level4-composition-emphasis, fig.width=14, fig.height=10}
+cat("=== LEVEL 4.1: PREY COMPOSITION - BP vs. TP EMPHASIS ===\n\n")
+
+# The 4-panel plot from 3.1 already shows Region × Waveform organization
+# Here we add specific statistical comparisons
+
+# Calculate mean composition similarity within groups
+calc_group_similarity <- function(ps) {
+  # Get OTU table
+  otu_mat <- as.matrix(otu_table(ps))
+  if (taxa_are_rows(ps)) {
+    otu_mat <- t(otu_mat)
+  }
+
+  # Calculate Bray-Curtis distance
+  dist_mat <- vegdist(otu_mat, method = "bray")
+
+  # Get metadata
+  meta <- data.frame(sample_data(ps))
+  meta$Group <- paste(meta$Region, meta$Waveform_Type, sep = "_")
+
+  # Calculate within-group vs. between-group similarities
+  dist_df <- as.matrix(dist_mat) %>%
+    as.data.frame() %>%
+    rownames_to_column("Sample1") %>%
+    pivot_longer(-Sample1, names_to = "Sample2", values_to = "Distance") %>%
+    filter(Sample1 < Sample2)  # Remove duplicates and self-comparisons
+
+  # Add group info
+  dist_df$Group1 <- meta$Group[match(dist_df$Sample1, rownames(meta))]
+  dist_df$Group2 <- meta$Group[match(dist_df$Sample2, rownames(meta))]
+  dist_df$Region1 <- meta$Region[match(dist_df$Sample1, rownames(meta))]
+  dist_df$Region2 <- meta$Region[match(dist_df$Sample2, rownames(meta))]
+  dist_df$Waveform1 <- meta$Waveform_Type[match(dist_df$Sample1, rownames(meta))]
+  dist_df$Waveform2 <- meta$Waveform_Type[match(dist_df$Sample2, rownames(meta))]
+
+  # Categorize comparisons
+  dist_df <- dist_df %>%
+    mutate(
+      Comparison = case_when(
+        Group1 == Group2 ~ "Same Region, Same Waveform",
+        Region1 == Region2 & Waveform1 != Waveform2 ~ "Same Region, Different Waveform",
+        Region1 != Region2 & Waveform1 == Waveform2 ~ "Different Region, Same Waveform",
+        Region1 != Region2 & Waveform1 != Waveform2 ~ "Different Region, Different Waveform",
+        TRUE ~ "Other"
+      )
+    )
+
+  return(dist_df)
+}
+
+# Calculate for both primer sets
+dist_comp_ps1 <- calc_group_similarity(ps1_pk)
+dist_comp_ps2 <- calc_group_similarity(ps2_pk)
+
+# Summary statistics
+cat("PRIMERSET 1 - Mean Bray-Curtis distances:\n")
+dist_summary_ps1 <- dist_comp_ps1 %>%
+  group_by(Comparison) %>%
+  summarise(
+    n = n(),
+    mean_dist = mean(Distance),
+    sd_dist = sd(Distance),
+    .groups = "drop"
+  ) %>%
+  arrange(mean_dist)
+
+print(dist_summary_ps1)
+
+cat("\n\nPRIMERSET 2 - Mean Bray-Curtis distances:\n")
+dist_summary_ps2 <- dist_comp_ps2 %>%
+  group_by(Comparison) %>%
+  summarise(
+    n = n(),
+    mean_dist = mean(Distance),
+    sd_dist = sd(Distance),
+    .groups = "drop"
+  ) %>%
+  arrange(mean_dist)
+
+print(dist_summary_ps2)
+
+# Visualization
+dist_comp_ps1$PrimerSet <- "Primerset 1"
+dist_comp_ps2$PrimerSet <- "Primerset 2"
+dist_comp_combined <- bind_rows(dist_comp_ps1, dist_comp_ps2)
+
+# Reorder comparison levels for logical display
+dist_comp_combined$Comparison <- factor(
+  dist_comp_combined$Comparison,
+  levels = c("Same Region, Same Waveform",
+             "Same Region, Different Waveform",
+             "Different Region, Same Waveform",
+             "Different Region, Different Waveform")
+)
+
+p_comp_distances <- ggplot(dist_comp_combined,
+                            aes(x = Comparison, y = Distance, fill = Comparison)) +
+  geom_boxplot(alpha = 0.7) +
+  facet_wrap(~ PrimerSet) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "none"
+  ) +
+  labs(
+    title = "P. kingsleyae: Dietary Dissimilarity by Region and Waveform",
+    subtitle = "Lower values = more similar diets",
+    x = "Comparison Type",
+    y = "Bray-Curtis Distance"
+  ) +
+  scale_fill_viridis_d()
+
+print(p_comp_distances)
+
+# Statistical test: Are different waveforms in same region more different than
+# same waveforms in different regions?
+cat("\n=== KEY STATISTICAL TEST ===\n")
+cat("Question: Do waveforms predict diet better than geography?\n")
+cat("Test: Same Waveform/Different Region vs. Different Waveform/Same Region\n\n")
+
+test_ps1 <- dist_comp_ps1 %>%
+  filter(Comparison %in% c("Same Region, Different Waveform",
+                          "Different Region, Same Waveform"))
+
+if (nrow(test_ps1) > 0) {
+  cat("PRIMERSET 1:\n")
+  wt_ps1 <- wilcox.test(Distance ~ Comparison, data = test_ps1)
+  print(wt_ps1)
+
+  cat("\nInterpretation:\n")
+  if (wt_ps1$p.value < 0.05) {
+    mean_same_wave <- mean(test_ps1$Distance[test_ps1$Comparison == "Different Region, Same Waveform"])
+    mean_diff_wave <- mean(test_ps1$Distance[test_ps1$Comparison == "Same Region, Different Waveform"])
+
+    if (mean_same_wave < mean_diff_wave) {
+      cat("Same waveform in different regions are MORE similar than\n")
+      cat("different waveforms in same region (p < 0.05).\n")
+      cat("→ WAVEFORM predicts diet better than GEOGRAPHY\n")
+    } else {
+      cat("Different waveforms in same region are MORE similar than\n")
+      cat("same waveform in different regions (p < 0.05).\n")
+      cat("→ GEOGRAPHY predicts diet better than WAVEFORM\n")
+    }
+  } else {
+    cat("No significant difference (p >= 0.05).\n")
+    cat("Cannot distinguish waveform from geographic effects.\n")
+  }
+}
+
+test_ps2 <- dist_comp_ps2 %>%
+  filter(Comparison %in% c("Same Region, Different Waveform",
+                          "Different Region, Same Waveform"))
+
+if (nrow(test_ps2) > 0) {
+  cat("\n\nPRIMERSET 2:\n")
+  wt_ps2 <- wilcox.test(Distance ~ Comparison, data = test_ps2)
+  print(wt_ps2)
+
+  cat("\nInterpretation:\n")
+  if (wt_ps2$p.value < 0.05) {
+    mean_same_wave <- mean(test_ps2$Distance[test_ps2$Comparison == "Different Region, Same Waveform"])
+    mean_diff_wave <- mean(test_ps2$Distance[test_ps2$Comparison == "Same Region, Different Waveform"])
+
+    if (mean_same_wave < mean_diff_wave) {
+      cat("Same waveform in different regions are MORE similar than\n")
+      cat("different waveforms in same region (p < 0.05).\n")
+      cat("→ WAVEFORM predicts diet better than GEOGRAPHY\n")
+    } else {
+      cat("Different waveforms in same region are MORE similar than\n")
+      cat("same waveform in different regions (p < 0.05).\n")
+      cat("→ GEOGRAPHY predicts diet better than WAVEFORM\n")
+    }
+  } else {
+    cat("No significant difference (p >= 0.05).\n")
+    cat("Cannot distinguish waveform from geographic effects.\n")
+  }
+}
+```
+
+## 4.2 Alpha Diversity: Two-Way ANOVA
+
+Test whether Shannon diversity differs by Region and/or Waveform using two-way ANOVA with interaction. This approach allows us to assess:
+
+1. Main effect of Region
+2. Main effect of Waveform
+3. Region × Waveform interaction
+4. Marginal effects (Type II/III SS approach)
+
+```{r level4-alpha-2way, fig.width=12, fig.height=8}
+cat("=== LEVEL 4.2: ALPHA DIVERSITY - TWO-WAY ANOVA ===\n\n")
+
+# Calculate diversity metrics
+div1_pk <- estimate_richness(ps1_pk, measures = c("Shannon"))
+meta1_pk <- data.frame(sample_data(ps1_pk), stringsAsFactors = FALSE)
+
+# Add grouping variables
+div1_pk$Region <- ifelse(meta1_pk$Locality_Name %in% c("Mengono Creek", "Iboundji Creek"),
+                        "North", "South")
+div1_pk$Waveform_Type <- meta1_pk$Waveform_Type
+div1_pk$Locality_Name <- meta1_pk$Locality_Name
+div1_pk$Sample_Name <- meta1_pk$Sample_Name
+
+# Convert to factors
+div1_pk$Region <- factor(div1_pk$Region, levels = c("North", "South"))
+div1_pk$Waveform_Type <- factor(div1_pk$Waveform_Type)
+
+# Same for PS2
+div2_pk <- estimate_richness(ps2_pk, measures = c("Shannon"))
+meta2_pk <- data.frame(sample_data(ps2_pk), stringsAsFactors = FALSE)
+
+div2_pk$Region <- ifelse(meta2_pk$Locality_Name %in% c("Mengono Creek", "Iboundji Creek"),
+                        "North", "South")
+div2_pk$Waveform_Type <- meta2_pk$Waveform_Type
+div2_pk$Locality_Name <- meta2_pk$Locality_Name
+div2_pk$Sample_Name <- meta2_pk$Sample_Name
+
+div2_pk$Region <- factor(div2_pk$Region, levels = c("North", "South"))
+div2_pk$Waveform_Type <- factor(div2_pk$Waveform_Type)
+
+# PRIMERSET 1 Analysis
+cat("=== PRIMERSET 1 ===\n\n")
+
+# Interactive model (Region × Waveform)
+cat("Two-Way ANOVA with Interaction (Region × Waveform):\n")
+anova_pk1_int <- aov(Shannon ~ Region * Waveform_Type, data = div1_pk)
+print(summary(anova_pk1_int))
+
+# Additive model (Region + Waveform)
+cat("\n\nAdditive Model (Region + Waveform):\n")
+anova_pk1_add <- aov(Shannon ~ Region + Waveform_Type, data = div1_pk)
+print(summary(anova_pk1_add))
+
+# Marginal effects using Type II SS
+cat("\n\nMarginal Effects (Type II Sums of Squares):\n")
+if (requireNamespace("car", quietly = TRUE)) {
+  print(car::Anova(anova_pk1_add, type = "II"))
+} else {
+  cat("car package not available. Showing sequential tests:\n\n")
+
+  cat("Region only:\n")
+  anova_pk1_region <- aov(Shannon ~ Region, data = div1_pk)
+  print(summary(anova_pk1_region))
+
+  cat("\nWaveform only:\n")
+  anova_pk1_wave <- aov(Shannon ~ Waveform_Type, data = div1_pk)
+  print(summary(anova_pk1_wave))
+}
+
+# Summary statistics by group
+cat("\n\nDescriptive Statistics:\n")
+div1_pk %>%
+  group_by(Region, Waveform_Type) %>%
+  summarise(
+    n = n(),
+    mean_shannon = mean(Shannon),
+    sd_shannon = sd(Shannon),
+    .groups = "drop"
+  ) %>%
+  kable(digits = 3, booktabs = TRUE) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+
+# PRIMERSET 2 Analysis
+cat("\n\n=== PRIMERSET 2 ===\n\n")
+
+# Interactive model
+cat("Two-Way ANOVA with Interaction (Region × Waveform):\n")
+anova_pk2_int <- aov(Shannon ~ Region * Waveform_Type, data = div2_pk)
+print(summary(anova_pk2_int))
+
+# Additive model
+cat("\n\nAdditive Model (Region + Waveform):\n")
+anova_pk2_add <- aov(Shannon ~ Region + Waveform_Type, data = div2_pk)
+print(summary(anova_pk2_add))
+
+# Marginal effects
+cat("\n\nMarginal Effects (Type II Sums of Squares):\n")
+if (requireNamespace("car", quietly = TRUE)) {
+  print(car::Anova(anova_pk2_add, type = "II"))
+} else {
+  cat("car package not available. Showing sequential tests:\n\n")
+
+  cat("Region only:\n")
+  anova_pk2_region <- aov(Shannon ~ Region, data = div2_pk)
+  print(summary(anova_pk2_region))
+
+  cat("\nWaveform only:\n")
+  anova_pk2_wave <- aov(Shannon ~ Waveform_Type, data = div2_pk)
+  print(summary(anova_pk2_wave))
+}
+
+# Summary statistics
+cat("\n\nDescriptive Statistics:\n")
+div2_pk %>%
+  group_by(Region, Waveform_Type) %>%
+  summarise(
+    n = n(),
+    mean_shannon = mean(Shannon),
+    sd_shannon = sd(Shannon),
+    .groups = "drop"
+  ) %>%
+  kable(digits = 3, booktabs = TRUE) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+
+# Visualization: Interaction plot
+div1_pk$PrimerSet <- "Primerset 1"
+div2_pk$PrimerSet <- "Primerset 2"
+div_combined <- bind_rows(div1_pk, div2_pk)
+
+p_alpha_interact <- ggplot(div_combined,
+                           aes(x = Region, y = Shannon, color = Waveform_Type,
+                               group = Waveform_Type)) +
+  stat_summary(fun = mean, geom = "point", size = 4) +
+  stat_summary(fun = mean, geom = "line", linewidth = 1) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.1) +
+  facet_wrap(~ PrimerSet) +
+  theme_minimal() +
+  labs(
+    title = "P. kingsleyae: Shannon Diversity by Region and Waveform",
+    subtitle = "Interaction plot with mean ± SE",
+    x = "Region",
+    y = "Shannon Diversity",
+    color = "Waveform"
+  ) +
+  scale_color_brewer(palette = "Set1")
+
+print(p_alpha_interact)
+
+# Boxplot version
+p_alpha_box <- ggplot(div_combined,
+                      aes(x = Region, y = Shannon, fill = Waveform_Type)) +
+  geom_boxplot(alpha = 0.7) +
+  geom_jitter(width = 0.1, alpha = 0.3) +
+  facet_wrap(~ PrimerSet) +
+  theme_minimal() +
+  labs(
+    title = "P. kingsleyae: Shannon Diversity Distribution",
+    x = "Region",
+    y = "Shannon Diversity",
+    fill = "Waveform"
+  ) +
+  scale_fill_brewer(palette = "Set1")
+
+print(p_alpha_box)
+
+cat("\n=== RESULT INTERPRETATION ===\n")
+cat("Expected pattern if waveform matters: Significant Waveform main effect\n")
+cat("Expected pattern if confounded: Significant Region effect, NS Waveform effect\n")
+```
+
+## 4.3 Beta Diversity: Two-Way PERMANOVA
+
+Apply PERMANOVA to test Region and Waveform effects on diet composition (Bray-Curtis dissimilarity). Use marginal tests (by="margin") to assess independent contributions.
+
+```{r level4-beta-2way, fig.width=14, fig.height=10}
+cat("=== LEVEL 4.3: BETA DIVERSITY - TWO-WAY PERMANOVA ===\n\n")
+
+# Prepare data for PERMANOVA - PS1
+otu1_pk <- as.matrix(otu_table(ps1_pk))
+if (taxa_are_rows(ps1_pk)) {
+  otu1_pk <- t(otu1_pk)
+}
+
+meta1_pk_beta <- data.frame(sample_data(ps1_pk), stringsAsFactors = FALSE)
+meta1_pk_beta$Region <- factor(
+  ifelse(meta1_pk_beta$Locality_Name %in% c("Mengono Creek", "Iboundji Creek"),
+         "North", "South"),
+  levels = c("North", "South")
+)
+meta1_pk_beta$Waveform_Type <- factor(meta1_pk_beta$Waveform_Type)
+
+# Ensure rownames match
+rownames(meta1_pk_beta) <- rownames(otu1_pk)
+
+dist1_pk <- vegdist(otu1_pk, method = "bray")
+
+# Prepare data for PERMANOVA - PS2
+otu2_pk <- as.matrix(otu_table(ps2_pk))
+if (taxa_are_rows(ps2_pk)) {
+  otu2_pk <- t(otu2_pk)
+}
+
+meta2_pk_beta <- data.frame(sample_data(ps2_pk), stringsAsFactors = FALSE)
+meta2_pk_beta$Region <- factor(
+  ifelse(meta2_pk_beta$Locality_Name %in% c("Mengono Creek", "Iboundji Creek"),
+         "North", "South"),
+  levels = c("North", "South")
+)
+meta2_pk_beta$Waveform_Type <- factor(meta2_pk_beta$Waveform_Type)
+
+rownames(meta2_pk_beta) <- rownames(otu2_pk)
+
+dist2_pk <- vegdist(otu2_pk, method = "bray")
+
+# PRIMERSET 1 - PERMANOVA
+cat("=== PRIMERSET 1 ===\n\n")
+
+# Additive model with sequential testing
+cat("Additive Model - Sequential (Region first):\n")
+perm_pk1_seq_region <- adonis2(dist1_pk ~ Region + Waveform_Type,
+                               data = meta1_pk_beta,
+                               permutations = 999,
+                               by = "terms")
+print(perm_pk1_seq_region)
+
+cat("\n\nAdditive Model - Sequential (Waveform first):\n")
+perm_pk1_seq_wave <- adonis2(dist1_pk ~ Waveform_Type + Region,
+                             data = meta1_pk_beta,
+                             permutations = 999,
+                             by = "terms")
+print(perm_pk1_seq_wave)
+
+# Marginal effects (most appropriate for confounded variables)
+cat("\n\nAdditive Model - Marginal Effects (Type III):\n")
+perm_pk1_margin <- adonis2(dist1_pk ~ Region + Waveform_Type,
+                           data = meta1_pk_beta,
+                           permutations = 999,
+                           by = "margin")
+print(perm_pk1_margin)
+
+# Interactive model
+cat("\n\nInteractive Model (Region × Waveform):\n")
+perm_pk1_int <- adonis2(dist1_pk ~ Region * Waveform_Type,
+                        data = meta1_pk_beta,
+                        permutations = 999)
+print(perm_pk1_int)
+
+# Extract R² values for reporting
+r2_region_ps1 <- perm_pk1_margin$R2[1]
+r2_wave_ps1 <- perm_pk1_margin$R2[2]
+p_region_ps1 <- perm_pk1_margin$`Pr(>F)`[1]
+p_wave_ps1 <- perm_pk1_margin$`Pr(>F)`[2]
+
+cat("\n\nEffect Size Summary (Marginal R²):\n")
+cat(sprintf("  Region: R² = %.3f, p = %.3f\n", r2_region_ps1, p_region_ps1))
+cat(sprintf("  Waveform: R² = %.3f, p = %.3f\n", r2_wave_ps1, p_wave_ps1))
+
+# PRIMERSET 2 - PERMANOVA
+cat("\n\n=== PRIMERSET 2 ===\n\n")
+
+cat("Additive Model - Sequential (Region first):\n")
+perm_pk2_seq_region <- adonis2(dist2_pk ~ Region + Waveform_Type,
+                               data = meta2_pk_beta,
+                               permutations = 999,
+                               by = "terms")
+print(perm_pk2_seq_region)
+
+cat("\n\nAdditive Model - Sequential (Waveform first):\n")
+perm_pk2_seq_wave <- adonis2(dist2_pk ~ Waveform_Type + Region,
+                             data = meta2_pk_beta,
+                             permutations = 999,
+                             by = "terms")
+print(perm_pk2_seq_wave)
+
+cat("\n\nAdditive Model - Marginal Effects (Type III):\n")
+perm_pk2_margin <- adonis2(dist2_pk ~ Region + Waveform_Type,
+                           data = meta2_pk_beta,
+                           permutations = 999,
+                           by = "margin")
+print(perm_pk2_margin)
+
+cat("\n\nInteractive Model (Region × Waveform):\n")
+perm_pk2_int <- adonis2(dist2_pk ~ Region * Waveform_Type,
+                        data = meta2_pk_beta,
+                        permutations = 999)
+print(perm_pk2_int)
+
+# Extract R² values
+r2_region_ps2 <- perm_pk2_margin$R2[1]
+r2_wave_ps2 <- perm_pk2_margin$R2[2]
+p_region_ps2 <- perm_pk2_margin$`Pr(>F)`[1]
+p_wave_ps2 <- perm_pk2_margin$`Pr(>F)`[2]
+
+cat("\n\nEffect Size Summary (Marginal R²):\n")
+cat(sprintf("  Region: R² = %.3f, p = %.3f\n", r2_region_ps2, p_region_ps2))
+cat(sprintf("  Waveform: R² = %.3f, p = %.3f\n", r2_wave_ps2, p_wave_ps2))
+
+# PCoA visualization
+pcoa1_pk <- cmdscale(dist1_pk, eig = TRUE, k = 2)
+var_exp1_pk <- pcoa1_pk$eig / sum(pcoa1_pk$eig) * 100
+
+pcoa2_pk <- cmdscale(dist2_pk, eig = TRUE, k = 2)
+var_exp2_pk <- pcoa2_pk$eig / sum(pcoa2_pk$eig) * 100
+
+# Create PCoA data frames
+pcoa1_df <- data.frame(
+  PCoA1 = pcoa1_pk$points[, 1],
+  PCoA2 = pcoa1_pk$points[, 2],
+  meta1_pk_beta,
+  PrimerSet = "Primerset 1"
+)
+
+pcoa2_df <- data.frame(
+  PCoA1 = pcoa2_pk$points[, 1],
+  PCoA2 = pcoa2_pk$points[, 2],
+  meta2_pk_beta,
+  PrimerSet = "Primerset 2"
+)
+
+pcoa_combined <- bind_rows(pcoa1_df, pcoa2_df)
+
+# Plot: Color by Region, Shape by Waveform
+p_pcoa_region_wave <- ggplot(pcoa_combined,
+                              aes(x = PCoA1, y = PCoA2,
+                                  color = Region, shape = Waveform_Type)) +
+  geom_point(size = 4, alpha = 0.7) +
+  facet_wrap(~ PrimerSet, scales = "free") +
+  theme_minimal() +
+  scale_color_brewer(palette = "Set2") +
+  labs(
+    title = "P. kingsleyae: Diet Composition by Region and Waveform",
+    subtitle = "PCoA on Bray-Curtis dissimilarity",
+    color = "Region",
+    shape = "Waveform"
+  ) +
+  theme(legend.position = "right")
+
+print(p_pcoa_region_wave)
+
+# Alternative: Color by Waveform, Shape by Region
+p_pcoa_wave_region <- ggplot(pcoa_combined,
+                              aes(x = PCoA1, y = PCoA2,
+                                  color = Waveform_Type, shape = Region)) +
+  geom_point(size = 4, alpha = 0.7) +
+  facet_wrap(~ PrimerSet, scales = "free") +
+  theme_minimal() +
+  scale_color_brewer(palette = "Set1") +
+  labs(
+    title = "P. kingsleyae: Diet Composition (Waveform Emphasis)",
+    subtitle = "PCoA on Bray-Curtis dissimilarity",
+    color = "Waveform",
+    shape = "Region"
+  ) +
+  theme(legend.position = "right")
+
+print(p_pcoa_wave_region)
+
+cat("\n=== RESULT INTERPRETATION ===\n")
+cat("Marginal R² values indicate independent contribution of each factor\n")
+cat("after accounting for the other.\n")
+cat("If Waveform R² > 0.10 and significant: suggests dietary niche partitioning\n")
+cat("If Region R² >> Waveform R²: geographic effects dominate\n")
+```
+
+## 4.4 Variance Partitioning
+
+Decompose variation in diet composition into pure Region effect, pure Waveform effect, and shared (confounded) variation using variance partitioning.
+
+```{r level4-varpart, fig.width=10, fig.height=8}
+cat("=== LEVEL 4.4: VARIANCE PARTITIONING ===\n\n")
+
+# This analysis partitions the variation explained by Region and Waveform
+# into pure and shared components
+
+# Prepare beta diversity results for variance partitioning
+beta1_pk <- list(
+  distance = dist1_pk,
+  metadata = meta1_pk_beta
+)
+
+beta2_pk <- list(
+  distance = dist2_pk,
+  metadata = meta2_pk_beta
+)
+
+# Run variance partitioning (uses helper function from gut_analysis_2026_helpers.R)
+cat("=== PRIMERSET 1 ===\n\n")
+varpart_pk1 <- variance_partition_permanova(
+  beta1_pk,
+  var1_formula = "~ Region",
+  var2_formula = "~ Waveform_Type"
+)
+
+cat("Variance Partitioning Results:\n")
+print(varpart_pk1$varpart)
+
+cat("\n\nSequential PERMANOVA (Region first):\n")
+print(varpart_pk1$sequential_var1_first)
+
+cat("\n\nSequential PERMANOVA (Waveform first):\n")
+print(varpart_pk1$sequential_var2_first)
+
+cat("\n\n#### Marginal PERMANOVA:\n\n")
+kable(as.data.frame(varpart_pk1$marginal),
+            digits = 3,
+            booktabs = TRUE,
+            caption = "Marginal PERMANOVA: Primerset 1") %>%
+      kable_styling(latex_options = c("striped", "HOLD_position"),
+                    font_size = 9,
+                    full_width = FALSE)
+
+# Extract variance components
+# varpart returns: [a] = pure Region, [b] = pure Waveform, [c] = shared
+vp1 <- varpart_pk1$varpart
+if (!is.null(vp1$part$indfract)) {
+  pure_region_ps1 <- vp1$part$indfract$Adj.R.squared[1]
+  pure_wave_ps1 <- vp1$part$indfract$Adj.R.squared[2]
+  shared_ps1 <- vp1$part$indfract$Adj.R.squared[3]
+
+  cat("\n\nVariance Components (Adjusted R²):\n")
+  cat(sprintf("  Pure Region: %.4f\n", pure_region_ps1))
+  cat(sprintf("  Pure Waveform: %.4f\n", pure_wave_ps1))
+  cat(sprintf("  Shared (confounded): %.4f\n", shared_ps1))
+  cat(sprintf("  Total explained: %.4f\n",
+              pure_region_ps1 + pure_wave_ps1 + shared_ps1))
+}
+
+cat("\n\n=== PRIMERSET 2 ===\n\n")
+varpart_pk2 <- variance_partition_permanova(
+  beta2_pk,
+  var1_formula = "~ Region",
+  var2_formula = "~ Waveform_Type"
+)
+
+cat("Variance Partitioning Results:\n")
+print(varpart_pk2$varpart)
+
+cat("\n\nSequential PERMANOVA (Region first):\n")
+print(varpart_pk2$sequential_var1_first)
+
+cat("\n\nSequential PERMANOVA (Waveform first):\n")
+print(varpart_pk2$sequential_var2_first)
+
+cat("\n\n#### Marginal PERMANOVA:\n\n")
+kable(as.data.frame(varpart_pk2$marginal),
+            digits = 3,
+            booktabs = TRUE,
+            caption = "Marginal PERMANOVA: Primerset 2") %>%
+      kable_styling(latex_options = c("striped", "HOLD_position"),
+                    font_size = 9,
+                    full_width = FALSE)
+
+vp2 <- varpart_pk2$varpart
+if (!is.null(vp2$part$indfract)) {
+  pure_region_ps2 <- vp2$part$indfract$Adj.R.squared[1]
+  pure_wave_ps2 <- vp2$part$indfract$Adj.R.squared[2]
+  shared_ps2 <- vp2$part$indfract$Adj.R.squared[3]
+
+  cat("\n\nVariance Components (Adjusted R²):\n")
+  cat(sprintf("  Pure Region: %.4f\n", pure_region_ps2))
+  cat(sprintf("  Pure Waveform: %.4f\n", pure_wave_ps2))
+  cat(sprintf("  Shared (confounded): %.4f\n", shared_ps2))
+  cat(sprintf("  Total explained: %.4f\n",
+              pure_region_ps2 + pure_wave_ps2 + shared_ps2))
+}
+
+# Create summary visualization
+if (!is.null(vp1$part$indfract) && !is.null(vp2$part$indfract)) {
+
+  varpart_summary <- data.frame(
+    PrimerSet = rep(c("PS1", "PS2"), each = 3),
+    Component = rep(c("Pure Region", "Pure Waveform", "Shared"), 2),
+    R2 = c(pure_region_ps1, pure_wave_ps1, shared_ps1,
+           pure_region_ps2, pure_wave_ps2, shared_ps2)
+  )
+
+  # Handle negative values (set to 0 for visualization)
+  varpart_summary$R2_plot <- pmax(varpart_summary$R2, 0)
+
+  p_varpart <- ggplot(varpart_summary,
+                      aes(x = PrimerSet, y = R2_plot, fill = Component)) +
+    geom_bar(stat = "identity", position = "stack") +
+    theme_minimal() +
+    scale_fill_brewer(palette = "Set2") +
+    labs(
+      title = "Variance Partitioning: Region vs. Waveform",
+      subtitle = "Decomposition of explained variation in diet composition",
+      x = "Primer Set",
+      y = "Proportion of Variance (Adjusted R²)",
+      fill = "Component"
+    ) +
+    geom_text(
+      data = varpart_summary %>%
+        group_by(PrimerSet) %>%
+        mutate(
+          pos = cumsum(R2_plot) - 0.5 * R2_plot,
+          label = sprintf("%.3f", R2)
+        ),
+      aes(y = pos, label = label),
+      size = 3
+    )
+
+  print(p_varpart)
+}
+
+cat("\n=== INTERPRETATION ===\n")
+cat("Pure Waveform variance indicates effect independent of geography.\n")
+cat("Large Shared variance indicates confounding between Region and Waveform.\n")
+cat("If Pure Waveform > 0.05: suggests waveform has independent effect on diet.\n")
+```
+
+## 4.5 Waveform Similarity Across Sites - CRITICAL TEST
+
+This is the key test to determine whether waveform predicts diet better than geography. Compare dietary similarity of:
+- Same waveform in different regions vs.
+- Different waveforms in same region
+
+If same-waveform-different-region < different-waveform-same-region → waveform matters more than geography.
+
+```{r level4-waveform-similarity, fig.width=12, fig.height=8}
+cat("=== LEVEL 4.5: WAVEFORM SIMILARITY ACROSS SITES ===\n")
+cat("THE CRITICAL TEST FOR WAVEFORM EFFECT\n\n")
+
+# This analysis was already performed in section 4.1
+# Here we formalize it as the key statistical test
+
+# Extract pairwise distances and categorize
+analyze_waveform_geography <- function(dist_mat, metadata) {
+
+  # Convert distance matrix to data frame
+  dist_df <- as.matrix(dist_mat) %>%
+    as.data.frame() %>%
+    rownames_to_column("Sample1") %>%
+    pivot_longer(-Sample1, names_to = "Sample2", values_to = "Distance") %>%
+    filter(Sample1 < Sample2)  # Remove self and duplicate comparisons
+
+  # Add metadata
+  dist_df$Region1 <- metadata$Region[match(dist_df$Sample1, rownames(metadata))]
+  dist_df$Region2 <- metadata$Region[match(dist_df$Sample2, rownames(metadata))]
+  dist_df$Waveform1 <- metadata$Waveform_Type[match(dist_df$Sample1, rownames(metadata))]
+  dist_df$Waveform2 <- metadata$Waveform_Type[match(dist_df$Sample2, rownames(metadata))]
+
+  # Create comparison categories
+  dist_df <- dist_df %>%
+    mutate(
+      Same_Region = Region1 == Region2,
+      Same_Waveform = Waveform1 == Waveform2,
+      Comparison = case_when(
+        Same_Region & Same_Waveform ~ "Same Region, Same Waveform",
+        Same_Region & !Same_Waveform ~ "Same Region, Different Waveform",
+        !Same_Region & Same_Waveform ~ "Different Region, Same Waveform",
+        !Same_Region & !Same_Waveform ~ "Different Region, Different Waveform"
+      )
+    )
+
+  return(dist_df)
+}
+
+# Analyze both primer sets
+dist_analysis_ps1 <- analyze_waveform_geography(dist1_pk, meta1_pk_beta)
+dist_analysis_ps2 <- analyze_waveform_geography(dist2_pk, meta2_pk_beta)
+
+# KEY STATISTICAL TEST
+cat("=== THE KEY COMPARISON ===\n")
+cat("H0: Same waveform in different regions has same dietary similarity as\n")
+cat("    different waveforms in same region\n")
+cat("HA: These groups differ in dietary similarity\n\n")
+
+# Extract the two key comparison groups for PS1
+key_comp_ps1 <- dist_analysis_ps1 %>%
+  filter(Comparison %in% c("Same Region, Different Waveform",
+                          "Different Region, Same Waveform"))
+
+if (nrow(key_comp_ps1) > 0) {
+  cat("=== PRIMERSET 1 ===\n\n")
+
+  # Summary statistics
+  key_summary_ps1 <- key_comp_ps1 %>%
+    group_by(Comparison) %>%
+    summarise(
+      n = n(),
+      mean_dist = mean(Distance),
+      median_dist = median(Distance),
+      sd_dist = sd(Distance),
+      .groups = "drop"
+    )
+
+  print(key_summary_ps1)
+
+  # Statistical test (Wilcoxon rank-sum, non-parametric)
+  cat("\n\nWilcoxon Rank-Sum Test:\n")
+  wt_key_ps1 <- wilcox.test(Distance ~ Comparison, data = key_comp_ps1)
+  print(wt_key_ps1)
+
+  # Effect size (rank-biserial correlation)
+  if (requireNamespace("rcompanion", quietly = TRUE)) {
+    eff_ps1 <- rcompanion::wilcoxonR(x = key_comp_ps1$Distance,
+                                    g = key_comp_ps1$Comparison)
+    cat("\nEffect size (rank-biserial r):", round(eff_ps1, 3), "\n")
+  }
+
+  # Interpretation
+  cat("\n\nINTERPRETATION:\n")
+  mean_same_wave_ps1 <- key_summary_ps1$mean_dist[
+    key_summary_ps1$Comparison == "Different Region, Same Waveform"
+  ]
+  mean_diff_wave_ps1 <- key_summary_ps1$mean_dist[
+    key_summary_ps1$Comparison == "Same Region, Different Waveform"
+  ]
+
+  if (wt_key_ps1$p.value < 0.05) {
+    if (mean_same_wave_ps1 < mean_diff_wave_ps1) {
+      cat("RESULT: Fish with same waveform in different regions have MORE\n")
+      cat("        similar diets than fish with different waveforms in the\n")
+      cat("        same region (p < 0.05).\n\n")
+      cat("CONCLUSION: WAVEFORM predicts diet better than GEOGRAPHY.\n")
+      cat("            This supports dietary niche partitioning by waveform.\n")
+    } else {
+      cat("RESULT: Fish in same region have MORE similar diets than fish\n")
+      cat("        with same waveform in different regions (p < 0.05).\n\n")
+      cat("CONCLUSION: GEOGRAPHY predicts diet better than WAVEFORM.\n")
+      cat("            Dietary differences are driven by site-level factors.\n")
+    }
+  } else {
+    cat("RESULT: No significant difference (p = ",
+        format.pval(wt_key_ps1$p.value, digits = 3), ")\n\n")
+    cat("CONCLUSION: Cannot distinguish waveform effect from geographic effect.\n")
+    cat("            The confounding is too strong to separate these factors.\n")
+  }
+}
+
+# Repeat for PS2
+key_comp_ps2 <- dist_analysis_ps2 %>%
+  filter(Comparison %in% c("Same Region, Different Waveform",
+                          "Different Region, Same Waveform"))
+
+if (nrow(key_comp_ps2) > 0) {
+  cat("\n\n=== PRIMERSET 2 ===\n\n")
+
+  key_summary_ps2 <- key_comp_ps2 %>%
+    group_by(Comparison) %>%
+    summarise(
+      n = n(),
+      mean_dist = mean(Distance),
+      median_dist = median(Distance),
+      sd_dist = sd(Distance),
+      .groups = "drop"
+    )
+
+  print(key_summary_ps2)
+
+  cat("\n\nWilcoxon Rank-Sum Test:\n")
+  wt_key_ps2 <- wilcox.test(Distance ~ Comparison, data = key_comp_ps2)
+  print(wt_key_ps2)
+
+  if (requireNamespace("rcompanion", quietly = TRUE)) {
+    eff_ps2 <- rcompanion::wilcoxonR(x = key_comp_ps2$Distance,
+                                    g = key_comp_ps2$Comparison)
+    cat("\nEffect size (rank-biserial r):", round(eff_ps2, 3), "\n")
+  }
+
+  cat("\n\nINTERPRETATION:\n")
+  mean_same_wave_ps2 <- key_summary_ps2$mean_dist[
+    key_summary_ps2$Comparison == "Different Region, Same Waveform"
+  ]
+  mean_diff_wave_ps2 <- key_summary_ps2$mean_dist[
+    key_summary_ps2$Comparison == "Same Region, Different Waveform"
+  ]
+
+  if (wt_key_ps2$p.value < 0.05) {
+    if (mean_same_wave_ps2 < mean_diff_wave_ps2) {
+      cat("RESULT: Fish with same waveform in different regions have MORE\n")
+      cat("        similar diets than fish with different waveforms in the\n")
+      cat("        same region (p < 0.05).\n\n")
+      cat("CONCLUSION: WAVEFORM predicts diet better than GEOGRAPHY.\n")
+      cat("            This supports dietary niche partitioning by waveform.\n")
+    } else {
+      cat("RESULT: Fish in same region have MORE similar diets than fish\n")
+      cat("        with same waveform in different regions (p < 0.05).\n\n")
+      cat("CONCLUSION: GEOGRAPHY predicts diet better than WAVEFORM.\n")
+      cat("            Dietary differences are driven by site-level factors.\n")
+    }
+  } else {
+    cat("RESULT: No significant difference (p = ",
+        format.pval(wt_key_ps2$p.value, digits = 3), ")\n\n")
+    cat("CONCLUSION: Cannot distinguish waveform effect from geographic effect.\n")
+    cat("            The confounding is too strong to separate these factors.\n")
+  }
+}
+
+# Visualization
+dist_analysis_ps1$PrimerSet <- "Primerset 1"
+dist_analysis_ps2$PrimerSet <- "Primerset 2"
+dist_combined_analysis <- bind_rows(dist_analysis_ps1, dist_analysis_ps2)
+
+# Reorder for clarity
+dist_combined_analysis$Comparison <- factor(
+  dist_combined_analysis$Comparison,
+  levels = c("Same Region, Same Waveform",
+             "Same Region, Different Waveform",
+             "Different Region, Same Waveform",
+             "Different Region, Different Waveform")
+)
+
+p_key_test <- ggplot(
+  dist_combined_analysis %>%
+    filter(Comparison %in% c("Same Region, Different Waveform",
+                            "Different Region, Same Waveform")),
+  aes(x = Comparison, y = Distance, fill = Comparison)
+) +
+  geom_violin(alpha = 0.5) +
+  geom_boxplot(width = 0.2, alpha = 0.7) +
+  facet_wrap(~ PrimerSet) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "none"
+  ) +
+  labs(
+    title = "THE KEY TEST: Waveform vs. Geography",
+    subtitle = "Lower distance = more similar diets",
+    x = "",
+    y = "Bray-Curtis Distance"
+  ) +
+  scale_fill_brewer(palette = "Set2")
+
+print(p_key_test)
+
+# All four comparison categories
+p_all_comparisons <- ggplot(dist_combined_analysis,
+                            aes(x = Comparison, y = Distance, fill = Comparison)) +
+  geom_violin(alpha = 0.5) +
+  geom_boxplot(width = 0.3, alpha = 0.7, outlier.alpha = 0.3) +
+  facet_wrap(~ PrimerSet) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "none"
+  ) +
+  labs(
+    title = "All Pairwise Comparisons: Region × Waveform",
+    x = "",
+    y = "Bray-Curtis Distance"
+  ) +
+  scale_fill_viridis_d()
+
+print(p_all_comparisons)
+
+# Statistical test across all four categories
+cat("\n\n=== OVERALL COMPARISON (All Four Categories) ===\n\n")
+
+cat("PRIMERSET 1:\n")
+kw_all_ps1 <- kruskal.test(Distance ~ Comparison, data = dist_analysis_ps1)
+print(kw_all_ps1)
+
+if (kw_all_ps1$p.value < 0.05 && requireNamespace("FSA", quietly = TRUE)) {
+  cat("\n#### Post-hoc pairwise comparisons (Dunn test):\n\n")
+  dunn_ps1 <- FSA::dunnTest(Distance ~ Comparison, data = dist_analysis_ps1,
+                           method = "bonferroni")
+  # Abbreviate comparison names for table width
+  dunn_df <- as.data.frame(dunn_ps1$res)
+  dunn_df$Comparison <- gsub("Different Region, Different Waveform", "DR-DW", dunn_df$Comparison)
+  dunn_df$Comparison <- gsub("Different Region, Same Waveform", "DR-SW", dunn_df$Comparison)
+  dunn_df$Comparison <- gsub("Same Region, Different Waveform", "SR-DW", dunn_df$Comparison)
+  dunn_df$Comparison <- gsub("Same Region, Same Waveform", "SR-SW", dunn_df$Comparison)
+
+  cat("Abbreviations: DR=Different Region, SR=Same Region, DW=Different Waveform, SW=Same Waveform\n\n")
+
+  kable(dunn_df, digits = 4, booktabs = TRUE,
+        caption = "Dunn Test: Primerset 1") %>%
+    kable_styling(latex_options = c("striped", "HOLD_position", "scale_down"),
+                  full_width = FALSE, font_size = 9)
+}
+
+cat("\n\nPRIMERSET 2:\n")
+kw_all_ps2 <- kruskal.test(Distance ~ Comparison, data = dist_analysis_ps2)
+print(kw_all_ps2)
+
+if (kw_all_ps2$p.value < 0.05 && requireNamespace("FSA", quietly = TRUE)) {
+  cat("\n#### Post-hoc pairwise comparisons (Dunn test):\n\n")
+  dunn_ps2 <- FSA::dunnTest(Distance ~ Comparison, data = dist_analysis_ps2,
+                           method = "bonferroni")
+  # Abbreviate comparison names for table width
+  dunn_df <- as.data.frame(dunn_ps2$res)
+  dunn_df$Comparison <- gsub("Different Region, Different Waveform", "DR-DW", dunn_df$Comparison)
+  dunn_df$Comparison <- gsub("Different Region, Same Waveform", "DR-SW", dunn_df$Comparison)
+  dunn_df$Comparison <- gsub("Same Region, Different Waveform", "SR-DW", dunn_df$Comparison)
+  dunn_df$Comparison <- gsub("Same Region, Same Waveform", "SR-SW", dunn_df$Comparison)
+
+  cat("Abbreviations: DR=Different Region, SR=Same Region, DW=Different Waveform, SW=Same Waveform\n\n")
+
+  kable(dunn_df, digits = 4, booktabs = TRUE,
+        caption = "Dunn Test: Primerset 2") %>%
+    kable_styling(latex_options = c("striped", "HOLD_position", "scale_down"),
+                  full_width = FALSE, font_size = 9)
+}
+```
+
+## 4.6 Prey Selectivity Analysis
+
+Integrate environmental prey availability data to distinguish between:
+1. **Compositional differences**: BP and TP eat different prey
+2. **Selectivity differences**: BP and TP show different preferences for the same available prey
+
+This requires D-frame net data from the field sites. If available, calculate Ivlev's electivity index (E) and test whether selectivity profiles differ between waveforms.
+
+```{r level4-selectivity, fig.width=12, fig.height=10}
+cat("=== LEVEL 4.6: PREY SELECTIVITY ANALYSIS ===\n\n")
+
+# Check if environmental data is available
+env_file <- file.path(root, "input_data", "gabon_inverts_compiled_cleaned_2026_final.csv")
+
+if (file.exists(env_file)) {
+
+  cat("Environmental prey availability data found.\n")
+  cat("Loading and processing...\n\n")
+
+  # Load environmental data
+  env_raw <- read.csv(env_file, stringsAsFactors = FALSE)
+  colnames(env_raw) <- trimws(colnames(env_raw))
+
+  # Clean and aggregate environmental data
+  env_data <- env_raw %>%
+    mutate(Count = as.numeric(Count)) %>%
+    mutate(Family_clean = sapply(Family, clean_family_name)) %>%
+    filter(!is.na(Family_clean), !is.na(Count), Count > 0) %>%
+    select(Site = Name, Family = Family_clean, Count)
+
+  # Map locality names to site names in environmental data
+  # This mapping depends on your data - adjust as needed
+  locality_to_site <- c(
+    "Bambomo" = "Bambomo Creek",
+    "Apassa" = "Ipassa Creek",
+    "Mengono" = "Mengono Creek",
+    "Iboundji" = "Iboundji Creek"
+  )
+
+  # Get family-level gut contents for P. kingsleyae
+  ps1_pk_family_counts <- extract_family_counts(ps1_pk)
+  ps2_pk_family_counts <- extract_family_counts(ps2_pk)
+
+  # Add metadata
+  meta1_sel <- data.frame(sample_data(ps1_pk))
+  meta1_sel$SampleID <- rownames(meta1_sel)
+
+  meta2_sel <- data.frame(sample_data(ps2_pk))
+  meta2_sel$SampleID <- rownames(meta2_sel)
+
+  ps1_pk_family_counts <- ps1_pk_family_counts %>%
+    left_join(meta1_sel %>%
+                select(SampleID, Locality_Name, Waveform_Type, Region),
+              by = "SampleID")
+
+  ps2_pk_family_counts <- ps2_pk_family_counts %>%
+    left_join(meta2_sel %>%
+                select(SampleID, Locality_Name, Waveform_Type, Region),
+              by = "SampleID")
+
+  # Function to calculate selectivity for an individual fish
+  calc_individual_selectivity <- function(sample_id, diet_data, env_data_site, metadata) {
+
+    # Get diet for this individual fish
+    diet_individual <- diet_data %>%
+      filter(SampleID == sample_id)
+
+    if (nrow(diet_individual) == 0) return(NULL)
+
+    # Calculate selectivity
+    selectivity <- calculate_selectivity(
+      diet_counts = diet_individual %>% select(Family, Count),
+      env_counts = env_data_site %>% select(Family, Count)
+    )
+
+    # Add metadata
+    meta_row <- metadata[metadata$SampleID == sample_id, ]
+    selectivity$SampleID <- sample_id
+    selectivity$Locality <- meta_row$Locality_Name
+    selectivity$Waveform <- meta_row$Waveform_Type
+    selectivity$Region <- meta_row$Region
+
+    return(selectivity)
+  }
+
+  # Calculate selectivity for EACH INDIVIDUAL FISH
+  selectivity_results_ps1 <- list()
+  selectivity_results_ps2 <- list()
+
+  # Get unique samples with locality info
+  samples_ps1 <- ps1_pk_family_counts %>%
+    distinct(SampleID, Locality_Name, Waveform_Type, Region)
+
+  for (i in 1:nrow(samples_ps1)) {
+    sample_id <- samples_ps1$SampleID[i]
+    locality <- samples_ps1$Locality_Name[i]
+
+    # Get site name for environmental data
+    site_name <- locality_to_site[locality]
+    if (is.na(site_name)) next
+
+    # Get environmental data for this site
+    env_site <- env_data %>% filter(Site == site_name)
+    if (nrow(env_site) == 0) next
+
+    # Calculate selectivity for this individual
+    selectivity <- calc_individual_selectivity(
+      sample_id = sample_id,
+      diet_data = ps1_pk_family_counts,
+      env_data_site = env_site,
+      metadata = meta1_sel
+    )
+
+    if (!is.null(selectivity)) {
+      selectivity_results_ps1[[sample_id]] <- selectivity
+    }
+  }
+
+  # Combine results
+  if (length(selectivity_results_ps1) > 0) {
+    selectivity_ps1_df <- bind_rows(selectivity_results_ps1)
+
+    cat("PRIMERSET 1 - Selectivity Analysis (Individual-level):\n")
+    cat("  Individuals analyzed:", n_distinct(selectivity_ps1_df$SampleID), "\n")
+    cat("  Total family-individual combinations:", nrow(selectivity_ps1_df), "\n\n")
+
+    # Summary statistics by Waveform
+    cat("Mean Ivlev's E by Waveform:\n")
+    selectivity_summary_ps1 <- selectivity_ps1_df %>%
+      group_by(Waveform, Region) %>%
+      summarise(
+        n_individuals = n_distinct(SampleID),
+        n_families = n_distinct(Family),
+        mean_E = mean(Ivlev_E, na.rm = TRUE),
+        mean_abs_E = mean(abs(Ivlev_E), na.rm = TRUE),
+        n_preference = sum(Selection_Type == "Preference"),
+        n_avoidance = sum(Selection_Type == "Avoidance"),
+        .groups = "drop"
+      )
+
+    print(selectivity_summary_ps1)
+
+    # Test: Do BP and TP differ in selectivity profiles?
+    # Create wide matrix of Ivlev's E values (one row per individual)
+    selectivity_wide_ps1 <- selectivity_ps1_df %>%
+      select(SampleID, Region, Waveform, Locality, Family, Ivlev_E) %>%
+      group_by(SampleID, Region, Waveform, Locality, Family) %>%
+      summarise(Ivlev_E = mean(Ivlev_E, na.rm = TRUE), .groups = "drop") %>%
+      pivot_wider(names_from = Family, values_from = Ivlev_E, values_fill = 0)
+
+    if (nrow(selectivity_wide_ps1) > 3) {  # Need at least 4 samples
+      selectivity_matrix_ps1 <- as.matrix(selectivity_wide_ps1[, -(1:4)])
+      rownames(selectivity_matrix_ps1) <- selectivity_wide_ps1$SampleID
+
+      selectivity_meta_ps1 <- selectivity_wide_ps1 %>%
+        select(SampleID, Region, Waveform, Locality)
+
+      # Distance matrix
+      selectivity_dist_ps1 <- vegdist(selectivity_matrix_ps1, method = "euclidean")
+
+      # PERMANOVA: Does waveform predict selectivity?
+      cat("\n\nPERMANOVA: Individual Selectivity ~ Waveform + Region\n")
+      cat("Sample size: ", nrow(selectivity_meta_ps1), " individuals\n")
+
+      if (n_distinct(selectivity_meta_ps1$Waveform) > 1 &&
+          n_distinct(selectivity_meta_ps1$Region) > 0) {
+
+        # Check degrees of freedom
+        n_samples <- nrow(selectivity_meta_ps1)
+        n_waveforms <- n_distinct(selectivity_meta_ps1$Waveform)
+        n_regions <- n_distinct(selectivity_meta_ps1$Region)
+        model_df <- (n_waveforms - 1) + (n_regions - 1)
+        residual_df <- n_samples - model_df - 1
+
+        cat("Model df:", model_df, ", Residual df:", residual_df, "\n\n")
+
+        if (residual_df > 0) {
+          perm_selectivity_ps1 <- adonis2(
+            selectivity_dist_ps1 ~ Waveform + Region,
+            data = selectivity_meta_ps1,
+            permutations = 999,
+            by = "margin"
+          )
+          print(perm_selectivity_ps1)
+
+          cat("\nInterpretation:\n")
+          if (!is.na(perm_selectivity_ps1$`Pr(>F)`[1]) &&
+              perm_selectivity_ps1$`Pr(>F)`[1] < 0.05) {
+            cat("Waveform DOES predict selectivity (p < 0.05)\n")
+            cat("→ BP and TP show different prey preferences\n")
+          } else {
+            cat("Waveform does NOT predict selectivity (p >= 0.05)\n")
+            cat("→ BP and TP show similar prey preferences\n")
+            cat("   (compositional differences driven by availability, not selection)\n")
+          }
+        } else {
+          cat("No residual component - insufficient samples for this model.\n")
+          cat("Try testing Waveform alone:\n\n")
+
+          perm_selectivity_wf_ps1 <- adonis2(
+            selectivity_dist_ps1 ~ Waveform,
+            data = selectivity_meta_ps1,
+            permutations = 999
+          )
+          print(perm_selectivity_wf_ps1)
+        }
+      } else {
+        cat("Insufficient waveform variation for PERMANOVA.\n")
+      }
+
+      # PCoA visualization
+      pcoa_sel_ps1 <- cmdscale(selectivity_dist_ps1, eig = TRUE, k = 2)
+
+      pcoa_sel_df_ps1 <- data.frame(
+        PCoA1 = pcoa_sel_ps1$points[, 1],
+        PCoA2 = pcoa_sel_ps1$points[, 2],
+        selectivity_meta_ps1
+      )
+
+      p_selectivity_ps1 <- ggplot(pcoa_sel_df_ps1,
+                                  aes(x = PCoA1, y = PCoA2,
+                                      color = Waveform, shape = Region)) +
+        geom_point(size = 4, alpha = 0.7) +
+        theme_minimal() +
+        scale_color_brewer(palette = "Set1") +
+        labs(
+          title = "PS1: Individual Prey Selectivity Profiles (BP vs. TP)",
+          subtitle = "PCoA on Ivlev's E values (each point = one fish)",
+          color = "Waveform",
+          shape = "Region"
+        )
+
+      print(p_selectivity_ps1)
+    } else {
+      cat("Insufficient samples for PERMANOVA (need at least 4 individuals).\n")
+    }
+
+  } else {
+    cat("Could not calculate selectivity for PS1 (no matching environmental data)\n")
+  }
+
+  # ===== PRIMERSET 2 ANALYSIS =====
+
+  # Get unique samples with locality info for PS2
+  samples_ps2 <- ps2_pk_family_counts %>%
+    distinct(SampleID, Locality_Name, Waveform_Type, Region)
+
+  for (i in 1:nrow(samples_ps2)) {
+    sample_id <- samples_ps2$SampleID[i]
+    locality <- samples_ps2$Locality_Name[i]
+
+    # Get site name for environmental data
+    site_name <- locality_to_site[locality]
+    if (is.na(site_name)) next
+
+    # Get environmental data for this site
+    env_site <- env_data %>% filter(Site == site_name)
+    if (nrow(env_site) == 0) next
+
+    # Calculate selectivity for this individual
+    selectivity <- calc_individual_selectivity(
+      sample_id = sample_id,
+      diet_data = ps2_pk_family_counts,
+      env_data_site = env_site,
+      metadata = meta2_sel
+    )
+
+    if (!is.null(selectivity)) {
+      selectivity_results_ps2[[sample_id]] <- selectivity
+    }
+  }
+
+  # Combine and analyze PS2 results
+  if (length(selectivity_results_ps2) > 0) {
+    selectivity_ps2_df <- bind_rows(selectivity_results_ps2)
+
+    cat("\n\n==============================================\n")
+    cat("PRIMERSET 2 - Selectivity Analysis (Individual-level):\n")
+    cat("  Individuals analyzed:", n_distinct(selectivity_ps2_df$SampleID), "\n")
+    cat("  Total family-individual combinations:",
+        nrow(selectivity_ps2_df), "\n\n")
+
+    # Summary statistics by Waveform
+    cat("Mean Ivlev's E by Waveform:\n")
+    selectivity_summary_ps2 <- selectivity_ps2_df %>%
+      group_by(Waveform, Region) %>%
+      summarise(
+        n_individuals = n_distinct(SampleID),
+        n_families = n_distinct(Family),
+        mean_E = mean(Ivlev_E, na.rm = TRUE),
+        mean_abs_E = mean(abs(Ivlev_E), na.rm = TRUE),
+        n_preference = sum(Selection_Type == "Preference"),
+        n_avoidance = sum(Selection_Type == "Avoidance"),
+        .groups = "drop"
+      )
+
+    print(selectivity_summary_ps2)
+
+    # Create wide matrix for PERMANOVA
+    selectivity_wide_ps2 <- selectivity_ps2_df %>%
+      select(SampleID, Region, Waveform, Locality, Family, Ivlev_E) %>%
+      group_by(SampleID, Region, Waveform, Locality, Family) %>%
+      summarise(Ivlev_E = mean(Ivlev_E, na.rm = TRUE), .groups = "drop") %>%
+      pivot_wider(names_from = Family, values_from = Ivlev_E, values_fill = 0)
+
+    if (nrow(selectivity_wide_ps2) > 3) {
+      selectivity_matrix_ps2 <- as.matrix(selectivity_wide_ps2[, -(1:4)])
+      rownames(selectivity_matrix_ps2) <- selectivity_wide_ps2$SampleID
+
+      selectivity_meta_ps2 <- selectivity_wide_ps2 %>%
+        select(SampleID, Region, Waveform, Locality)
+
+      # Distance matrix
+      selectivity_dist_ps2 <- vegdist(selectivity_matrix_ps2, method = "euclidean")
+
+      # PERMANOVA
+      cat("\n\nPERMANOVA: Individual Selectivity ~ Waveform + Region\n")
+      cat("Sample size: ", nrow(selectivity_meta_ps2), " individuals\n")
+
+      if (n_distinct(selectivity_meta_ps2$Waveform) > 1 &&
+          n_distinct(selectivity_meta_ps2$Region) > 0) {
+
+        n_samples <- nrow(selectivity_meta_ps2)
+        n_waveforms <- n_distinct(selectivity_meta_ps2$Waveform)
+        n_regions <- n_distinct(selectivity_meta_ps2$Region)
+        model_df <- (n_waveforms - 1) + (n_regions - 1)
+        residual_df <- n_samples - model_df - 1
+
+        cat("Model df:", model_df, ", Residual df:", residual_df, "\n\n")
+
+        if (residual_df > 0) {
+          perm_selectivity_ps2 <- adonis2(
+            selectivity_dist_ps2 ~ Waveform + Region,
+            data = selectivity_meta_ps2,
+            permutations = 999,
+            by = "margin"
+          )
+          print(perm_selectivity_ps2)
+
+          cat("\nInterpretation:\n")
+          if (!is.na(perm_selectivity_ps2$`Pr(>F)`[1]) &&
+              perm_selectivity_ps2$`Pr(>F)`[1] < 0.05) {
+            cat("Waveform DOES predict selectivity (p < 0.05)\n")
+            cat("→ BP and TP show different prey preferences\n")
+          } else {
+            cat("Waveform does NOT predict selectivity (p >= 0.05)\n")
+            cat("→ BP and TP show similar prey preferences\n")
+          }
+        } else {
+          cat("No residual component - insufficient samples for this model.\n")
+          cat("Try testing Waveform alone:\n\n")
+
+          perm_selectivity_wf_ps2 <- adonis2(
+            selectivity_dist_ps2 ~ Waveform,
+            data = selectivity_meta_ps2,
+            permutations = 999
+          )
+          print(perm_selectivity_wf_ps2)
+        }
+      } else {
+        cat("Insufficient waveform variation for PERMANOVA.\n")
+      }
+
+      # PCoA visualization
+      pcoa_sel_ps2 <- cmdscale(selectivity_dist_ps2, eig = TRUE, k = 2)
+
+      pcoa_sel_df_ps2 <- data.frame(
+        PCoA1 = pcoa_sel_ps2$points[, 1],
+        PCoA2 = pcoa_sel_ps2$points[, 2],
+        selectivity_meta_ps2
+      )
+
+      p_selectivity_ps2 <- ggplot(pcoa_sel_df_ps2,
+                                  aes(x = PCoA1, y = PCoA2,
+                                      color = Waveform, shape = Region)) +
+        geom_point(size = 4, alpha = 0.7) +
+        theme_minimal() +
+        scale_color_brewer(palette = "Set1") +
+        labs(
+          title = "PS2: Individual Prey Selectivity Profiles (BP vs. TP)",
+          subtitle = "PCoA on Ivlev's E values (each point = one fish)",
+          color = "Waveform",
+          shape = "Region"
+        )
+
+      print(p_selectivity_ps2)
+    } else {
+      cat("Insufficient samples for PERMANOVA (need at least 4 individuals).\n")
+    }
+
+  } else {
+    cat("Could not calculate selectivity for PS2 (no matching environmental data)\n")
+  }
+
+} else {
+  cat("Environmental prey availability data not found at:\n")
+  cat(env_file, "\n\n")
+  cat("Skipping prey selectivity analysis.\n")
+  cat("This analysis requires D-frame net collection data.\n")
+}
+```
+
+## 4.7 Mean Selectivity Comparison
+
+Calculate mean absolute selectivity (|E|) per fish to measure overall "choosiness", then compare BP vs. TP.
+
+```{r level4-mean-selectivity, fig.width=10, fig.height=6}
+cat("=== LEVEL 4.7: MEAN SELECTIVITY COMPARISON ===\n\n")
+
+if (exists("selectivity_ps1_df") && nrow(selectivity_ps1_df) > 0) {
+
+  # Calculate mean absolute selectivity per individual fish
+  mean_selectivity <- selectivity_ps1_df %>%
+    group_by(SampleID, Region, Waveform, Locality) %>%
+    summarise(
+      mean_abs_E = mean(abs(Ivlev_E), na.rm = TRUE),
+      n_families = n(),
+      .groups = "drop"
+    )
+
+  cat("Mean Absolute Selectivity by Individual:\n")
+  cat("(Higher |E| = more selective/choosy)\n\n")
+  print(head(mean_selectivity, 10))
+
+  cat("\n\nSummary by Waveform:\n")
+  print(mean_selectivity %>%
+    group_by(Waveform) %>%
+    summarise(
+      n_fish = n(),
+      mean_selectivity = mean(mean_abs_E),
+      sd_selectivity = sd(mean_abs_E),
+      .groups = "drop"
+    ))
+
+  # Test: Do BP and TP differ in overall selectivity?
+  if (n_distinct(mean_selectivity$Waveform) > 1) {
+    cat("\n\nWilcoxon Test: Mean |E| ~ Waveform\n")
+    wt_mean_sel <- wilcox.test(mean_abs_E ~ Waveform, data = mean_selectivity)
+    print(wt_mean_sel)
+
+    cat("\n\nInterpretation:\n")
+    if (wt_mean_sel$p.value < 0.05) {
+      cat("BP and TP differ significantly in overall selectivity (p < 0.05)\n")
+
+      bp_mean <- mean(mean_selectivity$mean_abs_E[mean_selectivity$Waveform == "BP"])
+      tp_mean <- mean(mean_selectivity$mean_abs_E[mean_selectivity$Waveform == "TP"])
+
+      if (bp_mean > tp_mean) {
+        cat("→ BP fish are MORE selective (choosier) than TP fish\n")
+      } else {
+        cat("→ TP fish are MORE selective (choosier) than BP fish\n")
+      }
+    } else {
+      cat("No significant difference in overall selectivity (p >= 0.05)\n")
+      cat("→ BP and TP are equally selective\n")
+    }
+
+    # Visualization
+    p_mean_sel <- ggplot(mean_selectivity,
+                         aes(x = Waveform, y = mean_abs_E, fill = Waveform)) +
+      geom_boxplot(alpha = 0.7) +
+      geom_jitter(width = 0.1, size = 3, alpha = 0.6) +
+      theme_minimal() +
+      scale_fill_brewer(palette = "Set1") +
+      labs(
+        title = "Mean Absolute Selectivity: BP vs. TP",
+        subtitle = "Higher values = more selective (choosier)",
+        x = "Waveform",
+        y = "Mean |Ivlev's E|"
+      ) +
+      theme(legend.position = "none")
+
+    print(p_mean_sel)
+  }
+
+} else {
+  cat("PS1: Selectivity data not available.\n")
+}
+
+# ===== PRIMERSET 2 MEAN SELECTIVITY =====
+
+if (exists("selectivity_ps2_df") && nrow(selectivity_ps2_df) > 0) {
+
+  cat("\n\n==============================================\n")
+  cat("PRIMERSET 2 - Mean Selectivity\n")
+  cat("==============================================\n\n")
+
+  # Calculate mean absolute selectivity per individual fish
+  mean_selectivity_ps2 <- selectivity_ps2_df %>%
+    group_by(SampleID, Region, Waveform, Locality) %>%
+    summarise(
+      mean_abs_E = mean(abs(Ivlev_E), na.rm = TRUE),
+      n_families = n(),
+      .groups = "drop"
+    )
+
+  cat("Mean Absolute Selectivity by Individual:\n")
+  cat("(Higher |E| = more selective/choosy)\n\n")
+  print(head(mean_selectivity_ps2, 10))
+
+  cat("\n\nSummary by Waveform:\n")
+  print(mean_selectivity_ps2 %>%
+    group_by(Waveform) %>%
+    summarise(
+      n_fish = n(),
+      mean_selectivity = mean(mean_abs_E),
+      sd_selectivity = sd(mean_abs_E),
+      .groups = "drop"
+    ))
+
+  # Test: Do BP and TP differ in overall selectivity?
+  if (n_distinct(mean_selectivity_ps2$Waveform) > 1) {
+    cat("\n\nWilcoxon Test: Mean |E| ~ Waveform\n")
+    wt_mean_sel_ps2 <- wilcox.test(mean_abs_E ~ Waveform,
+                                    data = mean_selectivity_ps2)
+    print(wt_mean_sel_ps2)
+
+    cat("\n\nInterpretation:\n")
+    if (wt_mean_sel_ps2$p.value < 0.05) {
+      cat("BP and TP differ significantly in overall selectivity (p < 0.05)\n")
+
+      bp_mean <- mean(mean_selectivity_ps2$mean_abs_E[
+        mean_selectivity_ps2$Waveform == "BP"])
+      tp_mean <- mean(mean_selectivity_ps2$mean_abs_E[
+        mean_selectivity_ps2$Waveform == "TP"])
+
+      if (bp_mean > tp_mean) {
+        cat("→ BP fish are MORE selective (choosier) than TP fish\n")
+      } else {
+        cat("→ TP fish are MORE selective (choosier) than BP fish\n")
+      }
+    } else {
+      cat("No significant difference in overall selectivity (p >= 0.05)\n")
+      cat("→ BP and TP are equally selective\n")
+    }
+
+    # Visualization
+    p_mean_sel_ps2 <- ggplot(mean_selectivity_ps2,
+                             aes(x = Waveform, y = mean_abs_E,
+                                 fill = Waveform)) +
+      geom_boxplot(alpha = 0.7) +
+      geom_jitter(width = 0.1, size = 3, alpha = 0.6) +
+      theme_minimal() +
+      scale_fill_brewer(palette = "Set1") +
+      labs(
+        title = "PS2: Mean Absolute Selectivity: BP vs. TP",
+        subtitle = "Higher values = more selective (choosier)",
+        x = "Waveform",
+        y = "Mean |Ivlev's E|"
+      ) +
+      theme(legend.position = "none")
+
+    print(p_mean_sel_ps2)
+  }
+
+} else {
+  cat("PS2: Selectivity data not available.\n")
+}
+```
+
+## 4.8 Synthesis and Interpretation
+
+For detailed interpretation guidelines, manuscript writing templates, and analytical strategy framework, see:
+
+**[analysis_plan.md](./analysis_plan.md)**
+
+```{r level4-synthesis-brief}
+cat("=== LEVEL 4.8: SYNTHESIS ===\n\n")
+cat("See analysis_plan.md for complete interpretation framework.\n\n")
+cat("Analysis complete. Results ready for interpretation.\n")
+```
+
+---
+
+**END OF DOCUMENT**
