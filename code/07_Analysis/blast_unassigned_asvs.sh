@@ -126,10 +126,14 @@ for (ps in c("PS1", "PS2")) {
     n_to_sample <- min(n_samples, nrow(high_abund))
 
     set.seed(42)  # For reproducibility
+    # Convert Total_Reads to numeric vector explicitly and calculate probabilities
+    read_counts <- as.numeric(high_abund$Total_Reads)
+    sampling_probs <- read_counts / sum(read_counts)
+
     sampled_indices <- sample(1:nrow(high_abund),
                              size = n_to_sample,
                              replace = FALSE,
-                             prob = high_abund$Total_Reads / sum(high_abund$Total_Reads))
+                             prob = sampling_probs)
 
     sampled_asvs <- high_abund[sampled_indices, ]
 
