@@ -139,8 +139,8 @@ for (ps in c("PS1", "PS2")) {
 
     cat(sprintf("  Sampled %d ASVs (abundance range: %d - %d reads)\n",
                 n_to_sample,
-                min(sampled_asvs$Total_Reads),
-                max(sampled_asvs$Total_Reads)))
+                min(pull(sampled_asvs, Total_Reads)),
+                max(pull(sampled_asvs, Total_Reads))))
 
     # Read the corresponding FASTA file
     primerset_name <- ifelse(ps == "PS1", "primerset1", "primerset2")
@@ -154,14 +154,16 @@ for (ps in c("PS1", "PS2")) {
     all_seqs <- readDNAStringSet(fasta_file)
 
     # Extract sequences for sampled ASVs
-    asv_ids <- sampled_asvs$ASV
+    asv_ids <- pull(sampled_asvs, ASV)
     matching_seqs <- all_seqs[names(all_seqs) %in% asv_ids]
 
     cat(sprintf("  Matched %d sequences\n", length(matching_seqs)))
 
     # Add abundance information to sequence names for reference
     names(matching_seqs) <- sapply(names(matching_seqs), function(asv_id) {
-        reads <- sampled_asvs$Total_Reads[sampled_asvs$ASV == asv_id]
+        reads <- sampled_asvs %>%
+            filter(ASV == asv_id) %>%
+            pull(Total_Reads)
         sprintf("%s|reads=%d", asv_id, reads)
     })
 
