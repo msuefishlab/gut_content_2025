@@ -11,6 +11,7 @@
 #   min_reads: Minimum read count to consider (default: 100)
 #   n_samples: Number of ASVs to sample per primer set (default: 75)
 
+root="$(git rev-parse --show-toplevel)"
 source ${root}/gut_contents.env
 
 # Parameters

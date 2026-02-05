@@ -13,6 +13,7 @@ echo "=================================================="
 echo "BLAST Analysis of Unassigned ASVs - Full Pipeline"
 echo "=================================================="
 echo ""
+root="$(git rev-parse --show-toplevel)"
 
 # Step 1: Extract and prepare sequences
 echo "Step 1: Extracting and preparing sequences..."
