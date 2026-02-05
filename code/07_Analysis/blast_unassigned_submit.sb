@@ -6,6 +6,7 @@
 #SBATCH --mem=32GB
 #SBATCH --job-name blast_unassigned
 #SBATCH --output=%x-%j.out
+#SBATCH --account=data-machine
 
 # SLURM script to BLAST unassigned ASVs against NCBI nt database
 #
