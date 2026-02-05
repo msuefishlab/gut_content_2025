@@ -23,8 +23,12 @@ singularity exec --bind $TMPDIR:/home/qiime2/q2cli $qiime_image qiime feature-cl
 --i-query ${input_data}/${primer}_all_p985_seqs.qza \
 --i-reference-reads ${database}/COInr_Metazoa_and_Schmidt_LerayTrimmed.qiime_trainseq.seqs.qza \
 --i-reference-taxonomy ${database}/COInr_Metazoa_and_Schmidt_LerayTrimmed.qiime_taxon.qza \
---p-perc-identity 0.95 --p-query-cov 0.94 \
---verbose \
+  --p-perc-identity 0.80 \
+  --p-query-cov 0.94 \
+  --p-top-hits-only \
+  --p-maxaccepts 20 \
+  --p-min-consensus 0.67 \
+  --verbose \
 --o-classification ${output_data}/${primer}_all_p985_taxa_VsearchOnly_p95_c94_COInr_Metazoa_and_Schmidt_LerayTrimmed.qza \
 --o-search-results ${output_data}/${primer}_all_p985_taxa_VsearchOnly_p95_c94_COInr_Metazoa_and_Schmidt_LerayTrimmed.search_results.qza
 
