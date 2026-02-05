@@ -19,7 +19,7 @@ cd ${SLURM_SUBMIT_DIR}
 
 # Load BLAST module
 module purge
-module load BLAST+/2.13.0
+module load BLAST+/2.14.1
 
 # Set up directories
 BLAST_DIR="${root}/output_data/07_Analysis/blast_unassigned"
@@ -58,7 +58,7 @@ echo "Running BLASTN..."
 
 blastn \
     -query ${INPUT_FASTA} \
-    -db /mnt/research/common-data/Bio/blastdb/v5/nt \
+    -db /mnt/research/common-data/Bio/blast_databases/blastdb_current/nt \
     -out ${OUTPUT_BLAST} \
     -outfmt "6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore staxids sscinames scomnames stitle" \
     -max_target_seqs 10 \
