@@ -127,7 +127,7 @@ for (ps in c("PS1", "PS2")) {
 
     set.seed(42)  # For reproducibility
     # Convert Total_Reads to numeric vector explicitly and calculate probabilities
-    read_counts <- as.numeric(high_abund$Total_Reads)
+    read_counts <- pull(high_abund, Total_Reads)
     sampling_probs <- read_counts / sum(read_counts)
 
     sampled_indices <- sample(1:nrow(high_abund),
