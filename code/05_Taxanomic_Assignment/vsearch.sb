@@ -29,8 +29,8 @@ singularity exec --bind $TMPDIR:/home/qiime2/q2cli $qiime_image qiime feature-cl
   --p-maxaccepts 20 \
   --p-min-consensus 0.67 \
   --verbose \
---o-classification ${output_data}/${primer}_all_p985_taxa_VsearchOnly_p95_c94_COInr_Metazoa_and_Schmidt_LerayTrimmed.qza \
---o-search-results ${output_data}/${primer}_all_p985_taxa_VsearchOnly_p95_c94_COInr_Metazoa_and_Schmidt_LerayTrimmed.search_results.qza
+--o-classification ${output_data}/${primer}_all_p985_taxa_VsearchOnly_p80_c94_COInr_Metazoa_and_Schmidt_LerayTrimmed.qza \
+--o-search-results ${output_data}/${primer}_all_p985_taxa_VsearchOnly_p80_c94_COInr_Metazoa_and_Schmidt_LerayTrimmed.search_results.qza
 
 singularity exec --bind $TMPDIR:/home/qiime2/q2cli $qiime_image qiime metadata tabulate \
 --m-input-file ${output_data}/${primer}_all_p985_taxa_VsearchOnly_p95_c94_COInr_Metazoa_and_Schmidt_LerayTrimmed.qza  \
