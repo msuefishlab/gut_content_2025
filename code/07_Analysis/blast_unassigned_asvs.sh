@@ -58,8 +58,13 @@ done
 echo ""
 echo "Creating subset FASTA files for high-abundance unassigned ASVs..."
 
+# Export variables so they're available inside Singularity
+export MIN_READS
+export N_SAMPLES
+export root
+
 # Run R script to extract and sample sequences
-singularity exec ${rimage} Rscript - <<'RSCRIPT'
+singularity exec ${rimage} Rscript - <<RSCRIPT
 library(tidyverse)
 library(Biostrings)
 
@@ -68,7 +73,7 @@ min_reads <- as.numeric(Sys.getenv("MIN_READS"))
 n_samples <- as.numeric(Sys.getenv("N_SAMPLES"))
 root <- Sys.getenv("root")
 
-print($root)
+print(root)
 
 blast_dir <- file.path(root, "output_data/07_Analysis/blast_unassigned")
 seq_dir <- file.path(blast_dir, "sequences")
