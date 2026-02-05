@@ -68,6 +68,8 @@ min_reads <- as.numeric(Sys.getenv("MIN_READS"))
 n_samples <- as.numeric(Sys.getenv("N_SAMPLES"))
 root <- Sys.getenv("root")
 
+print($root)
+
 blast_dir <- file.path(root, "output_data/07_Analysis/blast_unassigned")
 seq_dir <- file.path(blast_dir, "sequences")
 export_dir <- file.path(blast_dir, "exported_seqs")
