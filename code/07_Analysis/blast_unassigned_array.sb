@@ -1,0 +1,161 @@
+#!/bin/bash --login
+#SBATCH --time=01:00:00
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=2
+#SBATCH --mem=4GB
+#SBATCH --job-name blast_array
+#SBATCH --account=data-machine
+
+# SLURM array job to BLAST chunks of unassigned ASVs in parallel
+#
+# This script is called by blast_unassigned_parallel_submit.sh
+#
+# Required environment variables:
+#   root: Path to repository root
+#   PRIMERSET: Either "ps1" or "ps2"
+#   N_CHUNKS: Total number of chunks (for merge detection)
+
+cd ${SLURM_SUBMIT_DIR}
+
+# Load BLAST module
+module purge
+module load BLAST+/2.14.1
+
+# Set up directories
+BLAST_DIR="${root}/output_data/07_Analysis/blast_unassigned"
+CHUNKS_DIR="${BLAST_DIR}/chunks/${PRIMERSET}"
+TMP_RESULTS="${BLAST_DIR}/results/tmp_${PRIMERSET}"
+RESULTS_DIR="${BLAST_DIR}/results"
+
+# Array task specific files
+CHUNK_FILE="${CHUNKS_DIR}/chunk_$(printf "%04d" ${SLURM_ARRAY_TASK_ID}).fasta"
+OUTPUT_CHUNK="${TMP_RESULTS}/blast_$(printf "%04d" ${SLURM_ARRAY_TASK_ID}).txt"
+
+echo "========================================"
+echo "BLAST Array Task ${SLURM_ARRAY_TASK_ID}/${N_CHUNKS}"
+echo "========================================"
+echo "Primerset: ${PRIMERSET}"
+echo "Chunk: ${CHUNK_FILE}"
+echo "Output: ${OUTPUT_CHUNK}"
+echo "CPUs: ${SLURM_CPUS_PER_TASK}"
+echo ""
+
+# Check if chunk file exists
+if [ ! -f "${CHUNK_FILE}" ]; then
+    echo "ERROR: Chunk file not found: ${CHUNK_FILE}"
+    exit 1
+fi
+
+# Count sequences in this chunk
+N_SEQS=$(grep -c "^>" ${CHUNK_FILE})
+echo "Sequences in this chunk: ${N_SEQS}"
+echo ""
+
+# Run BLASTN against nt database
+echo "Running BLASTN..."
+blastn \
+    -query ${CHUNK_FILE} \
+    -db /mnt/research/common-data/Bio/blast_databases/blastdb_current/nt \
+    -out ${OUTPUT_CHUNK} \
+    -outfmt "6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore staxids sscinames scomnames stitle" \
+    -max_target_seqs 10 \
+    -max_hsps 1 \
+    -num_threads ${SLURM_CPUS_PER_TASK} \
+    -evalue 1e-5
+
+echo ""
+echo "BLAST complete for chunk ${SLURM_ARRAY_TASK_ID}"
+echo "Output saved to: ${OUTPUT_CHUNK}"
+echo ""
+
+# If this is the last task to complete, merge all results
+# We use a lock file approach to ensure only one task does the merge
+LOCK_FILE="${TMP_RESULTS}/.merge_lock"
+DONE_DIR="${TMP_RESULTS}/.done"
+mkdir -p ${DONE_DIR}
+
+# Mark this task as done
+touch ${DONE_DIR}/task_${SLURM_ARRAY_TASK_ID}.done
+
+# Check if all tasks are done (this is a simple check, race conditions possible but harmless)
+DONE_COUNT=$(ls ${DONE_DIR}/task_*.done 2>/dev/null | wc -l)
+
+if [ ${DONE_COUNT} -eq ${N_CHUNKS} ]; then
+    # Try to acquire lock for merging
+    if mkdir ${LOCK_FILE} 2>/dev/null; then
+        echo "========================================"
+        echo "All chunks complete - Starting merge"
+        echo "========================================"
+        echo ""
+
+        # Final output files
+        OUTPUT_BLAST="${RESULTS_DIR}/${PRIMERSET}_blast_results.txt"
+        OUTPUT_SUMMARY="${RESULTS_DIR}/${PRIMERSET}_blast_summary.tsv"
+
+        # Merge all chunk results
+        echo "Merging BLAST results..."
+        cat ${TMP_RESULTS}/blast_*.txt > ${OUTPUT_BLAST}
+
+        echo "Merged results saved to: ${OUTPUT_BLAST}"
+        echo ""
+
+        # Generate summary statistics
+        echo "Generating summary..."
+
+        awk -F'\t' '
+        BEGIN {
+            print "ASV\tReads\tTop_Hit_Species\tTop_Hit_Common\tPercent_Identity\tE_value\tBit_Score\tAlignment_Length\tTop_Hit_Title"
+        }
+        {
+            # Extract ASV ID and read count from query name (format: ASV|reads=N)
+            split($1, parts, "|")
+            asv = parts[1]
+            split(parts[2], reads_parts, "=")
+            reads = reads_parts[2]
+
+            # Track best hit per ASV (first hit is best due to sorting by bitscore)
+            if (!(asv in seen)) {
+                seen[asv] = 1
+                printf "%s\t%s\t%s\t%s\t%.2f\t%s\t%s\t%s\t%s\n",
+                    asv, reads, $14, $15, $3, $11, $12, $4, $16
+            }
+        }' ${OUTPUT_BLAST} | sort -t$'\t' -k2 -rn > ${OUTPUT_SUMMARY}
+
+        echo "Summary saved to: ${OUTPUT_SUMMARY}"
+        echo ""
+
+        # Count ASVs with hits
+        TOTAL_ASVS=$(grep -c "^>" ${BLAST_DIR}/sequences/${PRIMERSET}_unassigned_highAbund.fasta)
+        ASVS_WITH_HITS=$(tail -n +2 ${OUTPUT_SUMMARY} | wc -l)
+
+        echo "Summary statistics:"
+        echo "  Total ASVs searched: ${TOTAL_ASVS}"
+        echo "  ASVs with BLAST hits: ${ASVS_WITH_HITS}"
+        echo ""
+
+        # Top-level taxonomic breakdown
+        echo "Top-level taxonomic breakdown:"
+        awk -F'\t' 'NR>1 {print $3}' ${OUTPUT_SUMMARY} | \
+            sed 's/;.*//' | \
+            sort | uniq -c | sort -rn | head -20
+
+        echo ""
+        echo "========================================"
+        echo "Parallel BLAST Complete!"
+        echo "========================================"
+        echo ""
+        echo "Results:"
+        echo "  Full BLAST results: ${OUTPUT_BLAST}"
+        echo "  Summary table: ${OUTPUT_SUMMARY}"
+        echo ""
+        echo "Cleaning up temporary files..."
+        rm -rf ${TMP_RESULTS}
+        rm -rf ${CHUNKS_DIR}
+        echo "Done!"
+    else
+        echo "Another task is handling the merge"
+    fi
+else
+    echo "Chunk complete (${DONE_COUNT}/${N_CHUNKS} tasks finished)"
+fi

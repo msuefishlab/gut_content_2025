@@ -38,9 +38,46 @@ bash code/07_Analysis/blast_unassigned_asvs.sh [min_reads] [n_samples]
 - Sequences are exported from QIIME2 artifacts if not already done
 - ASV names include read counts for reference
 
-### 2. `blast_unassigned_submit.sb`
+### 2a. `blast_unassigned_parallel_submit.sh` (RECOMMENDED)
 
-SLURM script to run BLAST on HPCC.
+**Parallel version using SLURM job arrays for faster execution.**
+
+**Usage:**
+```bash
+# On HPCC
+source gut_contents.env
+bash code/07_Analysis/blast_unassigned_parallel_submit.sh ps1 [sequences_per_job]
+bash code/07_Analysis/blast_unassigned_parallel_submit.sh ps2 [sequences_per_job]
+```
+
+**Parameters:**
+- `PRIMERSET`: Either "ps1" or "ps2"
+- `sequences_per_job` (optional, default: 5): Number of sequences per array job
+
+**Resources (per array task):**
+- Time: 1 hour
+- CPUs: 2
+- Memory: 4GB
+
+**Advantages:**
+- **10-100x faster wall time** - runs many BLAST jobs in parallel
+- **Better resource utilization** - small jobs complete quickly
+- **Automatic merging** - results combined automatically
+- **Fault tolerance** - individual job failures don't affect others
+
+**Output:**
+- Same as serial version (see below)
+- Temporary files automatically cleaned up
+
+**How it works:**
+1. Splits input FASTA into chunks (5 sequences per chunk by default)
+2. Submits SLURM job array with one task per chunk
+3. Each task BLASTs its chunk independently
+4. Final task automatically merges results and generates summary
+
+### 2b. `blast_unassigned_submit.sb` (Serial version)
+
+**Single-job BLAST submission (slower but simpler).**
 
 **Usage:**
 ```bash
@@ -63,7 +100,9 @@ sbatch --export=root=/path/to/repo,PRIMERSET=ps2 \
 - CPUs: 8
 - Memory: 32GB
 
-**Output:**
+**Note:** Use parallel version for faster results. This serial version is provided as a fallback.
+
+**Output (both versions):**
 - `output_data/07_Analysis/blast_unassigned/results/`
   - `ps1_blast_results.txt`: Full BLAST output (tabular format)
   - `ps1_blast_summary.tsv`: Top hit per ASV with taxonomy
@@ -110,7 +149,29 @@ Rscript code/07_Analysis/analyze_blast_results.R
 
 ## Workflow
 
-### Quick Start (Recommended)
+### Quick Start - Parallel (RECOMMENDED)
+
+```bash
+# 1. Set up environment
+source gut_contents.env
+
+# 2. Extract and prepare sequences
+bash code/07_Analysis/blast_unassigned_asvs.sh 100 75
+
+# 3. Submit parallel BLAST jobs (on HPCC)
+bash code/07_Analysis/blast_unassigned_parallel_submit.sh ps1
+bash code/07_Analysis/blast_unassigned_parallel_submit.sh ps2
+
+# 4. Monitor jobs (will show array of jobs)
+squeue -u $USER
+
+# 5. Once jobs complete, analyze results
+Rscript code/07_Analysis/analyze_blast_results.R
+```
+
+**Expected time:** Minutes to 1-2 hours (vs 12 hours for serial version)
+
+### Quick Start - Serial (Fallback)
 
 ```bash
 # 1. Set up environment
@@ -126,7 +187,33 @@ squeue -u $USER
 Rscript code/07_Analysis/analyze_blast_results.R
 ```
 
-### Step-by-Step
+### Step-by-Step (Parallel)
+
+```bash
+# 1. Extract and prepare sequences
+source gut_contents.env
+bash code/07_Analysis/blast_unassigned_asvs.sh 100 75
+
+# 2. Submit parallel BLAST jobs (on HPCC)
+# Default: 5 sequences per job
+bash code/07_Analysis/blast_unassigned_parallel_submit.sh ps1
+bash code/07_Analysis/blast_unassigned_parallel_submit.sh ps2
+
+# Or customize chunk size (e.g., 10 sequences per job)
+bash code/07_Analysis/blast_unassigned_parallel_submit.sh ps1 10
+
+# 3. Check job status (array jobs show as jobID_[1-N])
+squeue -u $USER
+
+# 4. Monitor individual array task
+tail -f blast_array-JOBID_TASKID.out
+
+# 5. Results are automatically merged when all tasks complete
+# 6. Analyze results
+Rscript code/07_Analysis/analyze_blast_results.R
+```
+
+### Step-by-Step (Serial)
 
 ```bash
 # 1. Extract and prepare sequences
@@ -154,12 +241,44 @@ Rscript code/07_Analysis/analyze_blast_results.R
 
 ## Customization
 
+### Parallel vs Serial: Which to Use?
+
+**Use Parallel (recommended):**
+- Default for most cases - faster and more efficient
+- When you have >10 sequences to BLAST
+- When you want results quickly
+
+**Use Serial:**
+- Very few sequences (<10)
+- Testing or debugging
+- When HPCC job queue is very busy
+
+### Tune Parallel Performance
+
+The `sequences_per_job` parameter controls parallelization:
+
+```bash
+# More parallelization (faster, more jobs)
+bash code/07_Analysis/blast_unassigned_parallel_submit.sh ps1 1
+
+# Balanced (default, recommended for 50-100 sequences)
+bash code/07_Analysis/blast_unassigned_parallel_submit.sh ps1 5
+
+# Less parallelization (fewer jobs, longer per job)
+bash code/07_Analysis/blast_unassigned_parallel_submit.sh ps1 10
+```
+
+**Guidelines:**
+- **1-2 seqs/job**: Maximum parallelization, best for >100 sequences
+- **5 seqs/job** (default): Good balance for 50-100 sequences
+- **10-20 seqs/job**: Fewer jobs, better for <50 sequences
+
 ### Adjust abundance threshold
 
 To focus on even higher abundance ASVs (e.g., ≥500 reads):
 
 ```bash
-bash code/07_Analysis/blast_unassigned_run_all.sh 500 50
+bash code/07_Analysis/blast_unassigned_asvs.sh 500 50
 ```
 
 ### Change sample size
@@ -167,15 +286,15 @@ bash code/07_Analysis/blast_unassigned_run_all.sh 500 50
 To BLAST more sequences per primer set:
 
 ```bash
-bash code/07_Analysis/blast_unassigned_run_all.sh 100 150
+bash code/07_Analysis/blast_unassigned_asvs.sh 100 150
 ```
 
 ### Modify BLAST parameters
 
-Edit `blast_unassigned_submit.sb` to adjust:
+Edit `blast_unassigned_array.sb` (parallel) or `blast_unassigned_submit.sb` (serial) to adjust:
 - `-max_target_seqs`: Number of hits per query (default: 10)
 - `-evalue`: E-value threshold (default: 1e-5)
-- `-num_threads`: CPU threads (default: uses all allocated)
+- `-num_threads`: CPU threads (default: 2 for parallel, 8 for serial)
 
 ## Output Interpretation
 
@@ -243,11 +362,14 @@ install.packages(c("tidyverse", "patchwork", "Biostrings"))
 
 ## Notes
 
-- BLAST against nt can be slow (several hours per primer set)
+- **Parallel version is 10-100x faster** than serial (minutes to hours vs 12 hours)
+- Parallel version automatically cleans up temporary chunk files after merging
+- BLAST results are identical between serial and parallel versions
 - Results are saved in tabular format for easy parsing
 - Random sampling uses set.seed(42) for reproducibility
 - Weighted sampling prioritizes high-abundance ASVs
 - All scripts follow the project convention of sourcing `gut_contents.env`
+- Job array logs are saved as `blast_array-JOBID_TASKID.out` in submission directory
 
 ## Citation
 
