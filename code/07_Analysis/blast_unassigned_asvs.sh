@@ -22,6 +22,9 @@ N_SAMPLES=${2:-75}   # Default sample 75 ASVs per primer set
 BLAST_DIR="${root}/output_data/07_Analysis/blast_unassigned"
 SEQ_DIR="${BLAST_DIR}/sequences"
 EXPORT_DIR="${BLAST_DIR}/exported_seqs"
+TMPDIR="$SCRATCH/qiime2_tmp"
+
+mkdir -p ${TMPDIR}
 
 mkdir -p ${SEQ_DIR}
 mkdir -p ${EXPORT_DIR}
