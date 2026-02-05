@@ -59,7 +59,7 @@ echo ""
 echo "Creating subset FASTA files for high-abundance unassigned ASVs..."
 
 # Run R script to extract and sample sequences
-Rscript - <<'RSCRIPT'
+singularity exec ${rimage} Rscript - <<'RSCRIPT'
 library(tidyverse)
 library(Biostrings)
 
