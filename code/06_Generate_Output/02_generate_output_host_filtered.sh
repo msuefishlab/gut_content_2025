@@ -32,6 +32,7 @@ for primer in "${primers[@]}"; do
     echo "Step 1b: Grouping samples by fish_id..."
     singularity exec --bind $SCRATCH/tmp:/home/qiime2/q2cli $qiime_image qiime feature-table group \
         --i-table ${output_dir}/${primer}_all_p985_table_filtd.qza \
+        --p-axis 'sample' \
         --m-metadata-file ${sample_to_fish} \
         --m-metadata-column fish_id \
         --p-mode sum \
