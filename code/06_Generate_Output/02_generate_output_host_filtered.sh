@@ -12,8 +12,9 @@ for primer in "${primers[@]}"; do
     echo "========================================"
     echo "Processing: $primer"
     echo "========================================"
-    
-    metadata=${root}/input_data/metadata/${primer}_metadata_final.tsv
+
+    sample_to_fish=${root}/input_data/metadata/${primer}_sample_to_fish.tsv
+    fish_metadata=${root}/input_data/metadata/fish_id_metadata.tsv
     output_dir=${root}/output_data/06_Generate_Output
     
     # --- STEP 1: Summarize UNFILTERED table (for comparison) ---
@@ -21,16 +22,32 @@ for primer in "${primers[@]}"; do
     singularity exec --bind $SCRATCH/tmp:/home/qiime2/q2cli $qiime_image qiime feature-table summarize \
         --i-table ${output_dir}/${primer}_all_p985_table_filtd.qza \
         --o-visualization ${output_dir}/${primer}_all_p985_table_filtd.qzv \
-        --m-sample-metadata-file ${metadata}
-    
+        --m-sample-metadata-file ${sample_to_fish}
+
     singularity exec --bind $SCRATCH/tmp:/home/qiime2/q2cli $qiime_image qiime feature-table tabulate-seqs \
         --i-data ${output_dir}/${primer}_all_p985_seqs_Filtd.qza \
         --o-visualization ${output_dir}/${primer}_all_p985_seqs_Filtd.qzv
+
+    # --- STEP 1b: Group samples by fish_id ---
+    echo "Step 1b: Grouping samples by fish_id..."
+    singularity exec --bind $SCRATCH/tmp:/home/qiime2/q2cli $qiime_image qiime feature-table group \
+        --i-table ${output_dir}/${primer}_all_p985_table_filtd.qza \
+        --m-metadata-file ${sample_to_fish} \
+        --m-metadata-column fish_id \
+        --p-mode sum \
+        --o-grouped-table ${output_dir}/${primer}_all_p985_table_filtd_grouped.qza
+
+    # Summarize grouped table
+    echo "Step 1c: Summarizing grouped table..."
+    singularity exec --bind $SCRATCH/tmp:/home/qiime2/q2cli $qiime_image qiime feature-table summarize \
+        --i-table ${output_dir}/${primer}_all_p985_table_filtd_grouped.qza \
+        --o-visualization ${output_dir}/${primer}_all_p985_table_filtd_grouped.qzv \
+        --m-sample-metadata-file ${fish_metadata}
     
     # --- STEP 2: Filter out host (Chordata) sequences ---
-    echo "Step 2: Filtering host (Chordata) sequences..."
+    echo "Step 2: Filtering host (Chordata) sequences from grouped table..."
     singularity exec --bind $SCRATCH/tmp:/home/qiime2/q2cli $qiime_image qiime taxa filter-table \
-        --i-table ${output_dir}/${primer}_all_p985_table_filtd.qza \
+        --i-table ${output_dir}/${primer}_all_p985_table_filtd_grouped.qza \
         --i-taxonomy ${output_dir}/${primer}_all_p985_taxa_filtd_ALL.qza \
         --p-exclude "Chordata,Vertebrata,Actinopterygii,Craniata" \
         --p-mode "contains" \
@@ -41,14 +58,14 @@ for primer in "${primers[@]}"; do
     singularity exec --bind $SCRATCH/tmp:/home/qiime2/q2cli $qiime_image qiime feature-table summarize \
         --i-table ${output_dir}/${primer}_all_p985_table_filtd_NO_HOST.qza \
         --o-visualization ${output_dir}/${primer}_all_p985_table_filtd_NO_HOST.qzv \
-        --m-sample-metadata-file ${metadata}
+        --m-sample-metadata-file ${fish_metadata}
     
     # --- STEP 4: Taxa barplot (prey only, unrarefied) ---
     echo "Step 4: Generating taxa barplot (prey only, unrarefied)..."
     singularity exec --bind $SCRATCH/tmp:/home/qiime2/q2cli $qiime_image qiime taxa barplot \
         --i-table ${output_dir}/${primer}_all_p985_table_filtd_NO_HOST.qza \
         --i-taxonomy ${output_dir}/${primer}_all_p985_taxa_filtd_ALL.qza \
-        --m-metadata-file ${metadata} \
+        --m-metadata-file ${fish_metadata} \
         --o-visualization ${output_dir}/${primer}_taxa_bar_plots_NO_HOST_no_rarefy.qzv
     
     # --- STEP 5: Rarefaction curves (prey only) ---
@@ -77,7 +94,7 @@ for primer in "${primers[@]}"; do
     singularity exec --bind $SCRATCH/tmp:/home/qiime2/q2cli $qiime_image qiime taxa barplot \
         --i-table ${output_dir}/${primer}_all_p985_table_filtd_NO_HOST.rarefied.qza \
         --i-taxonomy ${output_dir}/${primer}_all_p985_taxa_filtd_ALL.qza \
-        --m-metadata-file ${metadata} \
+        --m-metadata-file ${fish_metadata} \
         --o-visualization ${output_dir}/${primer}_all_p985_table_filtd_NO_HOST.rarefied.qzv
     
     echo "Completed: $primer"
