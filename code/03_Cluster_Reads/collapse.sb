@@ -14,6 +14,7 @@ root="$(git rev-parse --show-toplevel)"
 source ${root}/"gut_contents.env"
 
 output_data=${root}/output_data/03_Clustered_Data
+sample_to_fish=${root}/input_data/metadata/${primer}_sample_to_fish.tsv
 
 mkdir -p ${output_data}
 
