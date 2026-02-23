@@ -42,8 +42,8 @@ ps1_table_file <- file.path(root, "output_data/06_Generate_Output/primerset1_all
 ps2_table_file <- file.path(root, "output_data/06_Generate_Output/primerset2_all_p985_table_filtd_NO_HOST.qza")
 ps1_seqs_file <- file.path(root, "output_data/06_Generate_Output/primerset1_all_p985_seqs_Filtd.qza")
 ps2_seqs_file <- file.path(root, "output_data/06_Generate_Output/primerset2_all_p985_seqs_Filtd.qza")
-ps1_metadata_file <- file.path(root, "input_data/metadata/primerset1_metadata_final.tsv")
-ps2_metadata_file <- file.path(root, "input_data/metadata/primerset2_metadata_final.tsv")
+ps1_metadata_file <- file.path(root, "input_data/metadata/fish_id_metadata.tsv")
+ps2_metadata_file <- file.path(root, "input_data/metadata/fish_id_metadata.tsv")
 
 cat("Starting taxonomy assignment diagnostics analysis...\n")
 cat("Output directory:", output_base, "\n\n")
@@ -62,11 +62,11 @@ load_taxonomy <- function(tax_file) {
 
   # Clean taxonomy columns - remove prefixes and taxids, trim whitespace
   tax_parsed <- tax %>%
-    mutate(across(Kingdom:Species, ~str_trim(.))) %>%
-    mutate(across(Kingdom:Species, ~str_remove(., "^[kpcofgs]__"))) %>%
-    mutate(across(Kingdom:Species, ~str_remove(., "_[0-9]+$"))) %>%
-    mutate(across(Kingdom:Species, ~na_if(., ""))) %>%
-    mutate(across(Kingdom:Species, ~na_if(., "NA")))
+    mutate(across(Kingdom:Species, ~ str_trim(.))) %>%
+    mutate(across(Kingdom:Species, ~ str_remove(., "^[kpcofgs]__"))) %>%
+    mutate(across(Kingdom:Species, ~ str_remove(., "_[0-9]+$"))) %>%
+    mutate(across(Kingdom:Species, ~ na_if(., ""))) %>%
+    mutate(across(Kingdom:Species, ~ na_if(., "NA")))
 
   cat("  Loaded", nrow(tax_parsed), "ASVs\n")
   return(tax_parsed)
@@ -78,7 +78,7 @@ load_feature_table <- function(qza_file) {
   ft_df <- as.data.frame(ft) %>%
     rownames_to_column("ASV") %>%
     as_tibble()
-  cat("  Loaded", nrow(ft_df), "ASVs x", ncol(ft_df)-1, "samples\n")
+  cat("  Loaded", nrow(ft_df), "ASVs x", ncol(ft_df) - 1, "samples\n")
   return(ft_df)
 }
 
@@ -144,7 +144,7 @@ ps1_no_family <- sum(is.na(ps1_tax$Family))
 ps2_family <- sum(!is.na(ps2_tax$Family))
 ps2_no_family <- sum(is.na(ps2_tax$Family))
 
-chi_test <- chisq.test(matrix(c(ps1_family, ps1_no_family, ps2_family, ps2_no_family), nrow=2))
+chi_test <- chisq.test(matrix(c(ps1_family, ps1_no_family, ps2_family, ps2_no_family), nrow = 2))
 stats_tests$asv_assignment <- tibble(
   Test = "Chi-square: ASV Family Assignment (PS1 vs PS2)",
   Statistic = chi_test$statistic,
@@ -156,11 +156,14 @@ stats_tests$asv_assignment <- tibble(
 p1 <- ggplot(asv_rates, aes(x = Rank, y = Percent_Assigned, fill = PrimerSet)) +
   geom_bar(stat = "identity", position = "dodge") +
   geom_text(aes(label = sprintf("%.1f%%", Percent_Assigned)),
-            position = position_dodge(width = 0.9), vjust = -0.5, size = 3) +
+    position = position_dodge(width = 0.9), vjust = -0.5, size = 3
+  ) +
   scale_fill_manual(values = c("PS1" = "#E69F00", "PS2" = "#56B4E9")) +
-  labs(title = "ASV-Level Assignment Rates by Taxonomic Rank",
-       subtitle = sprintf("PS1: n=%d ASVs | PS2: n=%d ASVs", nrow(ps1_tax), nrow(ps2_tax)),
-       x = "Taxonomic Rank", y = "% ASVs Assigned", fill = "Primer Set") +
+  labs(
+    title = "ASV-Level Assignment Rates by Taxonomic Rank",
+    subtitle = sprintf("PS1: n=%d ASVs | PS2: n=%d ASVs", nrow(ps1_tax), nrow(ps2_tax)),
+    x = "Taxonomic Rank", y = "% ASVs Assigned", fill = "Primer Set"
+  ) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
@@ -240,10 +243,14 @@ p2 <- ggplot(per_sample_rates, aes(x = PrimerSet, y = Percent_Assigned, fill = P
   geom_boxplot(alpha = 0.7) +
   geom_jitter(width = 0.2, alpha = 0.3, size = 1) +
   scale_fill_manual(values = c("PS1" = "#E69F00", "PS2" = "#56B4E9")) +
-  labs(title = "Per-Sample Read-Weighted Family Assignment Rates",
-       subtitle = sprintf("PS1: %.1f%% | PS2: %.1f%% | p = %.3f",
-                         ps1_read_rates$global, ps2_read_rates$global, wilcox_test$p.value),
-       x = "Primer Set", y = "% Reads Assigned to Family") +
+  labs(
+    title = "Per-Sample Read-Weighted Family Assignment Rates",
+    subtitle = sprintf(
+      "PS1: %.1f%% | PS2: %.1f%% | p = %.3f",
+      ps1_read_rates$global, ps2_read_rates$global, wilcox_test$p.value
+    ),
+    x = "Primer Set", y = "% Reads Assigned to Family"
+  ) +
   theme_bw() +
   theme(legend.position = "none")
 
@@ -324,8 +331,10 @@ p3 <- family_stats_combined %>%
   ggplot(aes(x = reorder(Family, -Total_Reads), y = Rel_Abundance, fill = PrimerSet)) +
   geom_bar(stat = "identity", position = "dodge") +
   scale_fill_manual(values = c("PS1" = "#E69F00", "PS2" = "#56B4E9")) +
-  labs(title = "Top 10 Prey Families: Relative Abundance Comparison",
-       x = "Family", y = "Relative Abundance (%)", fill = "Primer Set") +
+  labs(
+    title = "Top 10 Prey Families: Relative Abundance Comparison",
+    x = "Family", y = "Relative Abundance (%)", fill = "Primer Set"
+  ) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
@@ -338,9 +347,11 @@ p4 <- order_only_combined %>%
   ggplot(aes(x = reorder(Order, -Total_Reads), y = Rel_Abundance, fill = PrimerSet)) +
   geom_bar(stat = "identity", position = "dodge") +
   scale_fill_manual(values = c("PS1" = "#E69F00", "PS2" = "#56B4E9")) +
-  labs(title = "Order-Only Assignments (No Family Assignment)",
-       subtitle = "Potential missed family-level assignments",
-       x = "Order", y = "Relative Abundance (%)", fill = "Primer Set") +
+  labs(
+    title = "Order-Only Assignments (No Family Assignment)",
+    subtitle = "Potential missed family-level assignments",
+    x = "Order", y = "Relative Abundance (%)", fill = "Primer Set"
+  ) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
@@ -425,14 +436,17 @@ p5 <- poorly_summary %>%
   select(PrimerSet, Percent_ASVs_Poorly_Assigned, Percent_Reads_Top20) %>%
   pivot_longer(-PrimerSet, names_to = "Metric", values_to = "Percent") %>%
   mutate(Metric = recode(Metric,
-                         Percent_ASVs_Poorly_Assigned = "% ASVs Poorly Assigned",
-                         Percent_Reads_Top20 = "% Reads in Top20 Poorly Assigned")) %>%
+    Percent_ASVs_Poorly_Assigned = "% ASVs Poorly Assigned",
+    Percent_Reads_Top20 = "% Reads in Top20 Poorly Assigned"
+  )) %>%
   ggplot(aes(x = PrimerSet, y = Percent, fill = PrimerSet)) +
   geom_bar(stat = "identity") +
   facet_wrap(~Metric, scales = "free_y") +
   scale_fill_manual(values = c("PS1" = "#E69F00", "PS2" = "#56B4E9")) +
-  labs(title = "Poorly-Assigned ASVs: Proportion of Dataset",
-       x = "Primer Set", y = "Percent (%)") +
+  labs(
+    title = "Poorly-Assigned ASVs: Proportion of Dataset",
+    x = "Primer Set", y = "Percent (%)"
+  ) +
   theme_bw() +
   theme(legend.position = "none")
 
@@ -445,33 +459,33 @@ cat("Saved: figures/04_poorly_assigned_abundance.pdf\n")
 
 cat("\n=== Analysis 5: Paired Sample Analysis ===\n")
 
-# Identify paired samples
-ps1_paired_samples <- ps1_metadata %>%
-  filter(both_primersets == "yes") %>%
-  pull(sampleid)
+# Identify paired samples: samples that appear in BOTH primer sets
+ps1_samples <- per_sample_rates %>%
+  filter(PrimerSet == "PS1") %>%
+  pull(Sample)
 
-ps2_paired_samples <- ps2_metadata %>%
-  filter(both_primersets == "yes") %>%
-  pull(sampleid) %>%
-  str_remove("BF2$")
+ps2_samples <- per_sample_rates %>%
+  filter(PrimerSet == "PS2") %>%
+  pull(Sample)
 
-cat("PS1 paired samples:", length(ps1_paired_samples), "\n")
-cat("PS2 paired samples:", length(ps2_paired_samples), "\n")
+# Paired samples are those with matching sampleids across both primer sets
+paired_samples <- intersect(ps1_samples, ps2_samples)
+
+cat("PS1 total samples:", length(ps1_samples), "\n")
+cat("PS2 total samples:", length(ps2_samples), "\n")
+cat("Paired samples (in both primer sets):", length(paired_samples), "\n")
 
 # Extract paired sample data
 ps1_paired_data <- per_sample_rates %>%
-  filter(PrimerSet == "PS1", Sample %in% ps1_paired_samples) %>%
-  mutate(Base_Sample = Sample) %>%
-  select(Base_Sample, PS1_Percent = Percent_Assigned, PS1_Total_Reads = Total_Reads)
+  filter(PrimerSet == "PS1", Sample %in% paired_samples) %>%
+  select(Sample, PS1_Percent = Percent_Assigned, PS1_Total_Reads = Total_Reads)
 
 ps2_paired_data <- per_sample_rates %>%
-  filter(PrimerSet == "PS2") %>%
-  mutate(Base_Sample = str_remove(Sample, "BF2$")) %>%
-  filter(Base_Sample %in% ps1_paired_samples) %>%
-  select(Base_Sample, PS2_Percent = Percent_Assigned, PS2_Total_Reads = Total_Reads)
+  filter(PrimerSet == "PS2", Sample %in% paired_samples) %>%
+  select(Sample, PS2_Percent = Percent_Assigned, PS2_Total_Reads = Total_Reads)
 
 paired_comparison <- ps1_paired_data %>%
-  inner_join(ps2_paired_data, by = "Base_Sample") %>%
+  inner_join(ps2_paired_data, by = "Sample") %>%
   mutate(
     Difference = PS2_Percent - PS1_Percent,
     Outlier = abs(Difference) > 20
@@ -507,12 +521,16 @@ if (nrow(paired_comparison) > 2) {
     geom_point(aes(color = Outlier), size = 3, alpha = 0.7) +
     geom_smooth(method = "lm", se = TRUE, color = "blue", alpha = 0.2) +
     scale_color_manual(values = c("FALSE" = "black", "TRUE" = "red")) +
-    labs(title = "Paired Sample Family Assignment Rates",
-         subtitle = sprintf("r = %.3f, p = %.3f | n = %d samples",
-                           cor_test$estimate, cor_test$p.value, nrow(paired_comparison)),
-         x = "PS1: % Reads Assigned to Family",
-         y = "PS2: % Reads Assigned to Family",
-         color = "Outlier\n(>20% diff)") +
+    labs(
+      title = "Paired Sample Family Assignment Rates",
+      subtitle = sprintf(
+        "r = %.3f, p = %.3f | n = %d samples",
+        cor_test$estimate, cor_test$p.value, nrow(paired_comparison)
+      ),
+      x = "PS1: % Reads Assigned to Family",
+      y = "PS2: % Reads Assigned to Family",
+      color = "Outlier\n(>20% diff)"
+    ) +
     theme_bw() +
     coord_fixed()
 
@@ -583,8 +601,10 @@ p7 <- composition_combined %>%
   ungroup() %>%
   ggplot(aes(x = PrimerSet, y = Rel_Abundance, fill = reorder(Family, -Rel_Abundance))) +
   geom_bar(stat = "identity") +
-  labs(title = "Family-Level Composition: Top 15 Families",
-       x = "Primer Set", y = "Relative Abundance (%)", fill = "Family") +
+  labs(
+    title = "Family-Level Composition: Top 15 Families",
+    x = "Primer Set", y = "Relative Abundance (%)", fill = "Family"
+  ) +
   theme_bw() +
   theme(legend.position = "right")
 
@@ -598,11 +618,14 @@ p8 <- composition_combined %>%
   ggplot(aes(x = Family, y = Rel_Abundance, fill = PrimerSet)) +
   geom_bar(stat = "identity", position = "dodge") +
   geom_text(aes(label = sprintf("%.1f%%", Rel_Abundance)),
-            position = position_dodge(width = 0.9), vjust = -0.5, size = 4) +
+    position = position_dodge(width = 0.9), vjust = -0.5, size = 4
+  ) +
   scale_fill_manual(values = c("PS1" = "#E69F00", "PS2" = "#56B4E9")) +
-  labs(title = "Hydroptilidae vs Chironomidae: Direct Comparison",
-       subtitle = "Key prey families showing primer set differences",
-       x = "Family", y = "Relative Abundance (%)", fill = "Primer Set") +
+  labs(
+    title = "Hydroptilidae vs Chironomidae: Direct Comparison",
+    subtitle = "Key prey families showing primer set differences",
+    x = "Family", y = "Relative Abundance (%)", fill = "Primer Set"
+  ) +
   theme_bw() +
   theme(text = element_text(size = 12))
 
@@ -639,19 +662,27 @@ report_lines <- c(
   "",
   "### Key Findings",
   "",
-  sprintf("- **ASV-level Family assignment:** PS1: %.1f%%, PS2: %.1f%% (p = %.3f)",
-          filter(ps1_rates, Rank == "Family")$Percent_Assigned,
-          filter(ps2_rates, Rank == "Family")$Percent_Assigned,
-          stats_summary$P_value[stats_summary$Test == "Chi-square: ASV Family Assignment (PS1 vs PS2)"]),
-  sprintf("- **Read-weighted Family assignment:** PS1: %.1f%%, PS2: %.1f%% (p = %.3f)",
-          ps1_read_rates$global, ps2_read_rates$global,
-          stats_summary$P_value[stats_summary$Test == "Wilcoxon: Per-Sample Family Assignment (PS1 vs PS2)"]),
-  sprintf("- **Hydroptilidae abundance:** PS1: %.1f%%, PS2: %.1f%%",
-          filter(ps1_composition, Family == "Hydroptilidae")$Rel_Abundance[1],
-          filter(ps2_composition, Family == "Hydroptilidae")$Rel_Abundance[1]),
-  sprintf("- **Chironomidae abundance:** PS1: %.1f%%, PS2: %.1f%%",
-          filter(ps1_composition, Family == "Chironomidae")$Rel_Abundance[1],
-          filter(ps2_composition, Family == "Chironomidae")$Rel_Abundance[1]),
+  sprintf(
+    "- **ASV-level Family assignment:** PS1: %.1f%%, PS2: %.1f%% (p = %.3f)",
+    filter(ps1_rates, Rank == "Family")$Percent_Assigned,
+    filter(ps2_rates, Rank == "Family")$Percent_Assigned,
+    stats_summary$P_value[stats_summary$Test == "Chi-square: ASV Family Assignment (PS1 vs PS2)"]
+  ),
+  sprintf(
+    "- **Read-weighted Family assignment:** PS1: %.1f%%, PS2: %.1f%% (p = %.3f)",
+    ps1_read_rates$global, ps2_read_rates$global,
+    stats_summary$P_value[stats_summary$Test == "Wilcoxon: Per-Sample Family Assignment (PS1 vs PS2)"]
+  ),
+  sprintf(
+    "- **Hydroptilidae abundance:** PS1: %.1f%%, PS2: %.1f%%",
+    filter(ps1_composition, Family == "Hydroptilidae")$Rel_Abundance[1],
+    filter(ps2_composition, Family == "Hydroptilidae")$Rel_Abundance[1]
+  ),
+  sprintf(
+    "- **Chironomidae abundance:** PS1: %.1f%%, PS2: %.1f%%",
+    filter(ps1_composition, Family == "Chironomidae")$Rel_Abundance[1],
+    filter(ps2_composition, Family == "Chironomidae")$Rel_Abundance[1]
+  ),
   "",
   "---",
   "",
@@ -663,12 +694,18 @@ report_lines <- c(
   "",
   "| Rank | PS1 | PS2 |",
   "|------|-----|-----|",
-  paste0("| Family | ", sprintf("%.1f%%", filter(ps1_rates, Rank == "Family")$Percent_Assigned),
-         " | ", sprintf("%.1f%%", filter(ps2_rates, Rank == "Family")$Percent_Assigned), " |"),
-  paste0("| Genus | ", sprintf("%.1f%%", filter(ps1_rates, Rank == "Genus")$Percent_Assigned),
-         " | ", sprintf("%.1f%%", filter(ps2_rates, Rank == "Genus")$Percent_Assigned), " |"),
-  paste0("| Species | ", sprintf("%.1f%%", filter(ps1_rates, Rank == "Species")$Percent_Assigned),
-         " | ", sprintf("%.1f%%", filter(ps2_rates, Rank == "Species")$Percent_Assigned), " |"),
+  paste0(
+    "| Family | ", sprintf("%.1f%%", filter(ps1_rates, Rank == "Family")$Percent_Assigned),
+    " | ", sprintf("%.1f%%", filter(ps2_rates, Rank == "Family")$Percent_Assigned), " |"
+  ),
+  paste0(
+    "| Genus | ", sprintf("%.1f%%", filter(ps1_rates, Rank == "Genus")$Percent_Assigned),
+    " | ", sprintf("%.1f%%", filter(ps2_rates, Rank == "Genus")$Percent_Assigned), " |"
+  ),
+  paste0(
+    "| Species | ", sprintf("%.1f%%", filter(ps1_rates, Rank == "Species")$Percent_Assigned),
+    " | ", sprintf("%.1f%%", filter(ps2_rates, Rank == "Species")$Percent_Assigned), " |"
+  ),
   "",
   "**See:** `figures/01_assignment_rates_by_rank.pdf`",
   "",
@@ -692,12 +729,16 @@ report_lines <- c(
 # Add top 5 families for PS1
 top5_ps1 <- ps1_composition %>% slice_head(n = 5)
 for (i in 1:nrow(top5_ps1)) {
-  report_lines <- c(report_lines,
-                   sprintf("%d. %s: %.1f%% (%d reads)",
-                          i,
-                          ifelse(is.na(top5_ps1$Family[i]), "Unassigned", top5_ps1$Family[i]),
-                          top5_ps1$Rel_Abundance[i],
-                          top5_ps1$Total_Reads[i]))
+  report_lines <- c(
+    report_lines,
+    sprintf(
+      "%d. %s: %.1f%% (%d reads)",
+      i,
+      ifelse(is.na(top5_ps1$Family[i]), "Unassigned", top5_ps1$Family[i]),
+      top5_ps1$Rel_Abundance[i],
+      top5_ps1$Total_Reads[i]
+    )
+  )
 }
 
 report_lines <- c(report_lines, "", "**PS2:**")
@@ -705,15 +746,20 @@ report_lines <- c(report_lines, "", "**PS2:**")
 # Add top 5 families for PS2
 top5_ps2 <- ps2_composition %>% slice_head(n = 5)
 for (i in 1:nrow(top5_ps2)) {
-  report_lines <- c(report_lines,
-                   sprintf("%d. %s: %.1f%% (%d reads)",
-                          i,
-                          ifelse(is.na(top5_ps2$Family[i]), "Unassigned", top5_ps2$Family[i]),
-                          top5_ps2$Rel_Abundance[i],
-                          top5_ps2$Total_Reads[i]))
+  report_lines <- c(
+    report_lines,
+    sprintf(
+      "%d. %s: %.1f%% (%d reads)",
+      i,
+      ifelse(is.na(top5_ps2$Family[i]), "Unassigned", top5_ps2$Family[i]),
+      top5_ps2$Rel_Abundance[i],
+      top5_ps2$Total_Reads[i]
+    )
+  )
 }
 
-report_lines <- c(report_lines,
+report_lines <- c(
+  report_lines,
   "",
   "**See:** `figures/03_family_abundance_comparison.pdf`",
   "",
@@ -721,12 +767,16 @@ report_lines <- c(report_lines,
   "",
   "ASVs assigned to Order but not Family may represent missed taxonomic assignments:",
   "",
-  sprintf("- **PS1:** %.1f%% of reads in %d order-only ASVs",
-          sum(filter(order_only_combined, PrimerSet == "PS1")$Rel_Abundance),
-          sum(filter(order_only_combined, PrimerSet == "PS1")$N_ASVs)),
-  sprintf("- **PS2:** %.1f%% of reads in %d order-only ASVs",
-          sum(filter(order_only_combined, PrimerSet == "PS2")$Rel_Abundance),
-          sum(filter(order_only_combined, PrimerSet == "PS2")$N_ASVs)),
+  sprintf(
+    "- **PS1:** %.1f%% of reads in %d order-only ASVs",
+    sum(filter(order_only_combined, PrimerSet == "PS1")$Rel_Abundance),
+    sum(filter(order_only_combined, PrimerSet == "PS1")$N_ASVs)
+  ),
+  sprintf(
+    "- **PS2:** %.1f%% of reads in %d order-only ASVs",
+    sum(filter(order_only_combined, PrimerSet == "PS2")$Rel_Abundance),
+    sum(filter(order_only_combined, PrimerSet == "PS2")$N_ASVs)
+  ),
   "",
   "**See:** `figures/03_order_only_breakdown.pdf`, `tables/03_order_only_assignments.csv`",
   "",
@@ -734,13 +784,17 @@ report_lines <- c(report_lines,
   "",
   "## 3. Poorly-Assigned ASVs",
   "",
-  sprintf("Poorly-assigned ASVs (no Family assignment OR confidence < 0.85) represent %.1f%% of PS1 ASVs and %.1f%% of PS2 ASVs.",
-          filter(poorly_summary, PrimerSet == "PS1")$Percent_ASVs_Poorly_Assigned,
-          filter(poorly_summary, PrimerSet == "PS2")$Percent_ASVs_Poorly_Assigned),
+  sprintf(
+    "Poorly-assigned ASVs (no Family assignment OR confidence < 0.85) represent %.1f%% of PS1 ASVs and %.1f%% of PS2 ASVs.",
+    filter(poorly_summary, PrimerSet == "PS1")$Percent_ASVs_Poorly_Assigned,
+    filter(poorly_summary, PrimerSet == "PS2")$Percent_ASVs_Poorly_Assigned
+  ),
   "",
-  sprintf("The top 20 most abundant poorly-assigned ASVs account for %.1f%% of PS1 reads and %.1f%% of PS2 reads.",
-          filter(poorly_summary, PrimerSet == "PS1")$Percent_Reads_Top20,
-          filter(poorly_summary, PrimerSet == "PS2")$Percent_Reads_Top20),
+  sprintf(
+    "The top 20 most abundant poorly-assigned ASVs account for %.1f%% of PS1 reads and %.1f%% of PS2 reads.",
+    filter(poorly_summary, PrimerSet == "PS1")$Percent_Reads_Top20,
+    filter(poorly_summary, PrimerSet == "PS2")$Percent_Reads_Top20
+  ),
   "",
   "**For manual BLAST verification:**",
   "- `sequences/ps1_poorly_assigned_top20.fasta`",
@@ -757,7 +811,8 @@ if (nrow(paired_comparison) > 2) {
   cor_val <- stats_summary$Statistic[stats_summary$Test == "Pearson Correlation: Paired Samples (PS1 vs PS2)"]
   cor_p <- stats_summary$P_value[stats_summary$Test == "Pearson Correlation: Paired Samples (PS1 vs PS2)"]
 
-  report_lines <- c(report_lines,
+  report_lines <- c(
+    report_lines,
     "",
     sprintf("Analyzed %d samples sequenced with both primer sets.", nrow(paired_comparison)),
     "",
@@ -767,14 +822,16 @@ if (nrow(paired_comparison) > 2) {
     "**See:** `figures/05_paired_sample_correlation.pdf`, `tables/05_paired_sample_assignments.csv`"
   )
 } else {
-  report_lines <- c(report_lines,
+  report_lines <- c(
+    report_lines,
     "",
     "Insufficient paired samples for correlation analysis.",
     ""
   )
 }
 
-report_lines <- c(report_lines,
+report_lines <- c(
+  report_lines,
   "",
   "---",
   "",
@@ -789,11 +846,12 @@ hydro_ps2 <- filter(ps2_composition, Family == "Hydroptilidae")$Rel_Abundance[1]
 chiro_ps1 <- filter(ps1_composition, Family == "Chironomidae")$Rel_Abundance[1]
 chiro_ps2 <- filter(ps2_composition, Family == "Chironomidae")$Rel_Abundance[1]
 
-report_lines <- c(report_lines,
+report_lines <- c(
+  report_lines,
   "| Family | PS1 | PS2 | Fold Difference |",
   "|--------|-----|-----|-----------------|",
-  sprintf("| Hydroptilidae | %.1f%% | %.1f%% | %.1fx |", hydro_ps1, hydro_ps2, hydro_ps1/hydro_ps2),
-  sprintf("| Chironomidae | %.1f%% | %.1f%% | %.1fx |", chiro_ps1, chiro_ps2, chiro_ps2/chiro_ps1),
+  sprintf("| Hydroptilidae | %.1f%% | %.1f%% | %.1fx |", hydro_ps1, hydro_ps2, hydro_ps1 / hydro_ps2),
+  sprintf("| Chironomidae | %.1f%% | %.1f%% | %.1fx |", chiro_ps1, chiro_ps2, chiro_ps2 / chiro_ps1),
   "",
   "**See:** `figures/06_hydroptilidae_vs_chironomidae.pdf`, `figures/06_composition_stacked_bar.pdf`",
   "",
@@ -814,7 +872,8 @@ if (abs(ps1_read_rates$global - ps2_read_rates$global) < 5) {
   conclusion <- "Assignment rates show moderate differences. The compositional differences likely reflect a COMBINATION of real biological differences in primer specificity and some taxonomic assignment variation."
 }
 
-report_lines <- c(report_lines,
+report_lines <- c(
+  report_lines,
   conclusion,
   "",
   "### Next Steps",

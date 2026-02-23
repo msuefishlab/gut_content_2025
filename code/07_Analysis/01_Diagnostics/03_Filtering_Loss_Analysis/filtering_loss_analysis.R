@@ -34,11 +34,11 @@ dir.create(file.path(output_base, "report"), recursive = TRUE, showWarnings = FA
 
 # Define input file paths
 input_files <- list(
-  ps1_before = file.path(root, "output_data", "03_Clustered_Data", "primerset1_all_p985_table.qza"),
-  ps1_after = file.path(root, "output_data", "06_Generate_Output", "primerset1_all_p985_table_filtd.qza"),
+  ps1_before = file.path(root, "output_data", "03_Clustered_Data", "primerset1_all_p985_table_grouped.qza"),
+  ps1_after = file.path(root, "output_data", "06_Generate_Output", "primerset1_all_p985_table_filtd_grouped.qza"),
   ps1_taxonomy = file.path(root, "output_data", "06_Generate_Output", "primerset1_all_p985_taxa_VsearchOnly_p95_c94_COInr_Metazoa_and_Schmidt_LerayTrimmed.tsv"),
-  ps2_before = file.path(root, "output_data", "03_Clustered_Data", "primerset2_all_p985_table.qza"),
-  ps2_after = file.path(root, "output_data", "06_Generate_Output", "primerset2_all_p985_table_filtd.qza"),
+  ps2_before = file.path(root, "output_data", "03_Clustered_Data", "primerset2_all_p985_table_grouped.qza"),
+  ps2_after = file.path(root, "output_data", "06_Generate_Output", "primerset2_all_p985_table_filtd_grouped.qza"),
   ps2_taxonomy = file.path(root, "output_data", "06_Generate_Output", "primerset2_all_p985_taxa_VsearchOnly_p95_c94_COInr_Metazoa_and_Schmidt_LerayTrimmed.tsv")
 )
 
@@ -80,8 +80,10 @@ load_feature_table_qza <- function(qza_file) {
   n_asvs <- nrow(feature_tibble)
   n_samples <- ncol(feature_tibble) - 1
 
-  cat(sprintf("✓ (%d ASVs, %d samples, %s reads)\n",
-              n_asvs, n_samples, format(total_reads, big.mark = ",")))
+  cat(sprintf(
+    "✓ (%d ASVs, %d samples, %s reads)\n",
+    n_asvs, n_samples, format(total_reads, big.mark = ",")
+  ))
 
   return(feature_tibble)
 }
@@ -93,24 +95,30 @@ load_feature_table_qza <- function(qza_file) {
 parse_vsearch_taxonomy <- function(taxon_string) {
   # Handle "Unassigned" case
   if (taxon_string == "Unassigned" || is.na(taxon_string)) {
-    return(list(Kingdom = NA_character_, Phylum = NA_character_,
-                Class = NA_character_, Order = NA_character_,
-                Family = NA_character_, Genus = NA_character_,
-                Species = NA_character_))
+    return(list(
+      Kingdom = NA_character_, Phylum = NA_character_,
+      Class = NA_character_, Order = NA_character_,
+      Family = NA_character_, Genus = NA_character_,
+      Species = NA_character_
+    ))
   }
 
   # Split on "; "
   ranks <- str_split(taxon_string, "; ")[[1]]
 
   # Initialize result
-  result <- list(Kingdom = NA_character_, Phylum = NA_character_,
-                 Class = NA_character_, Order = NA_character_,
-                 Family = NA_character_, Genus = NA_character_,
-                 Species = NA_character_)
+  result <- list(
+    Kingdom = NA_character_, Phylum = NA_character_,
+    Class = NA_character_, Order = NA_character_,
+    Family = NA_character_, Genus = NA_character_,
+    Species = NA_character_
+  )
 
   # Rank prefix mapping
-  rank_map <- c("k__" = "Kingdom", "p__" = "Phylum", "c__" = "Class",
-                "o__" = "Order", "f__" = "Family", "g__" = "Genus", "s__" = "Species")
+  rank_map <- c(
+    "k__" = "Kingdom", "p__" = "Phylum", "c__" = "Class",
+    "o__" = "Order", "f__" = "Family", "g__" = "Genus", "s__" = "Species"
+  )
 
   for (rank_str in ranks) {
     # Extract prefix
@@ -570,16 +578,18 @@ plot_filtering_loss_comparison <- function(global_summary) {
     ) %>%
     mutate(
       Metric = recode(Metric,
-                     "Percent_ASVs_Lost" = "% ASVs Lost",
-                     "Percent_Reads_Lost" = "% Reads Lost")
+        "Percent_ASVs_Lost" = "% ASVs Lost",
+        "Percent_Reads_Lost" = "% Reads Lost"
+      )
     )
 
   # Create plot
   p <- ggplot(plot_data, aes(x = PrimerSet, y = Percent_Lost, fill = PrimerSet)) +
     geom_col(width = 0.7) +
     geom_text(aes(label = sprintf("%.1f%%", Percent_Lost)),
-              vjust = -0.5, size = 4) +
-    facet_wrap(~ Metric, scales = "free_y") +
+      vjust = -0.5, size = 4
+    ) +
+    facet_wrap(~Metric, scales = "free_y") +
     scale_fill_manual(values = primer_colors) +
     labs(
       title = "Global Filtering Loss Comparison",
@@ -747,7 +757,7 @@ plot_abundance_distribution <- function(removed_asvs_df) {
     scale_x_log10(labels = scales::comma) +
     scale_fill_manual(values = primer_colors) +
     scale_color_manual(values = primer_colors) +
-    facet_wrap(~ PrimerSet, ncol = 1) +
+    facet_wrap(~PrimerSet, ncol = 1) +
     labs(
       title = "Abundance Distribution of Removed ASVs",
       subtitle = "Dashed line = median abundance",
@@ -855,16 +865,24 @@ report_lines <- c(
   "",
   "### Key Findings:",
   "",
-  sprintf("- **PS1** lost **%.1f%%** of ASVs (%.1f%% of reads)",
-          ps1_global$Percent_ASVs_Lost, ps1_global$Percent_Reads_Lost),
-  sprintf("- **PS2** lost **%.1f%%** of ASVs (%.1f%% of reads)",
-          ps2_global$Percent_ASVs_Lost, ps2_global$Percent_Reads_Lost),
-  sprintf("- Absolute difference: **%.1f%%** (ASVs), **%.1f%%** (reads)",
-          abs(ps1_global$Percent_ASVs_Lost - ps2_global$Percent_ASVs_Lost),
-          abs(ps1_global$Percent_Reads_Lost - ps2_global$Percent_Reads_Lost)),
-  sprintf("- Statistical significance (global read loss): **%s** (p = %.4f)",
-          ifelse(prop_test_result$p.value < 0.05, "YES", "NO"),
-          prop_test_result$p.value),
+  sprintf(
+    "- **PS1** lost **%.1f%%** of ASVs (%.1f%% of reads)",
+    ps1_global$Percent_ASVs_Lost, ps1_global$Percent_Reads_Lost
+  ),
+  sprintf(
+    "- **PS2** lost **%.1f%%** of ASVs (%.1f%% of reads)",
+    ps2_global$Percent_ASVs_Lost, ps2_global$Percent_Reads_Lost
+  ),
+  sprintf(
+    "- Absolute difference: **%.1f%%** (ASVs), **%.1f%%** (reads)",
+    abs(ps1_global$Percent_ASVs_Lost - ps2_global$Percent_ASVs_Lost),
+    abs(ps1_global$Percent_Reads_Lost - ps2_global$Percent_Reads_Lost)
+  ),
+  sprintf(
+    "- Statistical significance (global read loss): **%s** (p = %.4f)",
+    ifelse(prop_test_result$p.value < 0.05, "YES", "NO"),
+    prop_test_result$p.value
+  ),
   "",
   "---",
   "",

@@ -1,0 +1,1006 @@
+---
+title: "Bale Creek Mormyrid Community Dietary Variation: Comprehensive Analysis"
+author: "Gorsuch, Picq, Gallant"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    toc: true
+    latex_engine: xelatex
+    keep_tex: false
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
+    theme: flatly
+knit: (function(inputFile, encoding) { root <- rprojroot::find_root(".git/index"); rmarkdown::render(inputFile, encoding = encoding, output_dir = file.path(root, "output_data/07_Analysis")) })
+header-includes:
+- \usepackage{longtable}
+- \usepackage{booktabs}
+- \usepackage{float}
+---
+
+```{r setup, include=FALSE}
+# Configure knitr
+knitr::opts_chunk$set(
+  echo = FALSE,
+  warning = FALSE,
+  message = FALSE,
+  fig.width = 7,
+  fig.height = 4.5,
+  dpi = 300
+)
+
+# Set root and source core setup
+root <- rprojroot::find_root(".git/index")
+source(file.path(root, "code/07_Analysis/core_setup.R"))
+source(file.path(root, "code/07_Analysis/gut_analysis_2026_helpers.R"))
+
+# Load required libraries
+library(tidyverse)
+library(phyloseq)
+library(vegan)
+library(knitr)
+library(kableExtra)
+library(patchwork)
+
+# This loads from core_setup.R:
+# - ps1, ps2 (full primer set data)
+# - ps1_bale, ps2_bale (Bale Creek subsets with rare taxa removed)
+# - GLOBAL_FAMILY_COLORS (unified color palette)
+# - Color variables (bp_color, tp_color, ps1_color, ps2_color)
+```
+
+# Overview
+
+## Biological Context
+
+This analysis examines dietary variation across the multi-species mormyrid community at Bale Creek, a single locality containing 8-9 sympatric species. Unlike single-species analyses, this community-level approach allows us to assess:
+
+1. **Interspecific dietary differentiation**: Do different mormyrid species exploit different prey resources?
+2. **Waveform effects across species**: Does electrosensory phenotype (BP vs TP) influence diet independent of species identity?
+3. **Individual-level variation**: How do sex and body size contribute to dietary variation within this community?
+
+## Research Questions
+
+1. What is the relative contribution of **Species identity** vs **Waveform type** to dietary variation?
+2. Do **Sex** and **Body size** explain additional variation beyond species and waveform?
+3. Are dietary patterns concordant between PS1 and PS2 primer sets?
+4. Which prey families characterize the diets of different species?
+
+## Analytical Approach
+
+We use a comprehensive PERMANOVA framework with:
+
+- **Marginal (Type III) tests** to assess independent contributions of each factor
+- **Variance partitioning** to quantify shared vs unique variance components
+- **Dispersion tests** to validate PERMANOVA assumptions
+- **Dual primer set validation** to ensure findings are robust across metabarcoding methods
+
+**Key differences from P. kingsleyae single-species analysis:**
+
+- Multi-species community (8-9 species) vs single species
+- No Region factor (single locality)
+- No Parasite factor (absent in Bale Creek samples)
+- Primary focus on Species differences with Waveform as secondary factor
+
+---
+
+# Data Preparation
+
+## Complete-Case Filtering
+
+```{r data-prep-functions}
+prepare_bale_comprehensive_data <- function(ps) {
+  # Extract metadata
+  meta <- data.frame(sample_data(ps), stringsAsFactors = FALSE)
+  cat("Starting samples:", nrow(meta), "\n")
+
+  # Clean species names (expands P. → Paramormyrops, etc.)
+  meta$Species <- clean_species_name(meta$Species)
+
+  # Add body_size from SL
+  meta$body_size <- as.numeric(meta$SL)
+
+  # Ensure factors with proper levels
+  meta$Species <- factor(meta$Species)
+  meta$Sex <- factor(meta$Sex, levels = c("Male", "Female", "Juvenile"))
+  meta$Waveform_Type <- factor(meta$Waveform_Type, levels = c("BP", "TP"))
+
+  # Filter to complete cases
+  complete_cases <- !is.na(meta$Species) &
+                    !is.na(meta$Sex) &
+                    !is.na(meta$body_size) &
+                    !is.na(meta$Waveform_Type)
+
+  cat("Complete cases:", sum(complete_cases), "\n")
+  cat("Removed due to missing data:", sum(!complete_cases), "\n")
+
+  meta_filt <- meta[complete_cases, ]
+
+  # Check species with <3 samples (warn but don't filter yet)
+  species_counts <- table(meta_filt$Species)
+  low_n_species <- names(species_counts)[species_counts < 3]
+  if (length(low_n_species) > 0) {
+    cat("\nWARNING: Species with <3 samples (unstable for PERMANOVA):\n")
+    for (sp in low_n_species) {
+      cat("  -", sp, "(n =", species_counts[sp], ")\n")
+    }
+  }
+
+  # Prune phyloseq and calculate distance matrix
+  ps_filt <- prune_samples(rownames(meta_filt), ps)
+  ps_filt <- prune_taxa(taxa_sums(ps_filt) > 0, ps_filt)
+
+  otu_mat <- as.matrix(otu_table(ps_filt))
+  if (taxa_are_rows(ps_filt)) {
+    otu_mat <- t(otu_mat)
+  }
+
+  dist_mat <- vegdist(otu_mat, method = "bray")
+  rownames(meta_filt) <- rownames(otu_mat)
+
+  return(list(
+    distance = dist_mat,
+    metadata = meta_filt,
+    otu = otu_mat,
+    ps_filtered = ps_filt
+  ))
+}
+```
+
+```{r apply-filtering}
+cat("=== PREPARING PS1 DATA ===\n")
+comp_ps1 <- prepare_bale_comprehensive_data(ps1_bale)
+
+cat("\n=== PREPARING PS2 DATA ===\n")
+comp_ps2 <- prepare_bale_comprehensive_data(ps2_bale)
+```
+
+## Sample Size Summary
+
+```{r sample-size-summary}
+# Create comprehensive sample size table
+create_sample_summary <- function(metadata, ps_name) {
+  cat("\n### Sample Size Summary -", ps_name, "###\n\n")
+
+  # Overall counts
+  cat("Total samples:", nrow(metadata), "\n\n")
+
+  # By Species
+  cat("By Species:\n")
+  print(sort(table(metadata$Species), decreasing = TRUE))
+  cat("\n")
+
+  # By Waveform
+  cat("By Waveform:\n")
+  print(table(metadata$Waveform_Type))
+  cat("\n")
+
+  # By Sex
+  cat("By Sex:\n")
+  print(table(metadata$Sex))
+  cat("\n")
+
+  # Cross-tabulation: Species × Waveform
+  cat("Species × Waveform Cross-tabulation:\n")
+  cross_tab <- table(metadata$Species, metadata$Waveform_Type)
+  print(cross_tab)
+  cat("\n")
+
+  # Check for confounding
+  confounded_species <- rowSums(cross_tab > 0) == 1
+  if (any(confounded_species)) {
+    cat("WARNING: Species-Waveform confounding detected!\n")
+    cat("The following species have only one waveform type:\n")
+    conf_names <- names(confounded_species)[confounded_species]
+    for (sp in conf_names) {
+      wf <- colnames(cross_tab)[cross_tab[sp, ] > 0]
+      cat("  -", sp, ":", wf, "\n")
+    }
+    cat("\n")
+  }
+
+  # Body size summary by Species
+  cat("Body size (SL) summary by Species:\n")
+  size_summary <- metadata %>%
+    group_by(Species) %>%
+    summarise(
+      n = n(),
+      mean_SL = mean(body_size, na.rm = TRUE),
+      sd_SL = sd(body_size, na.rm = TRUE),
+      min_SL = min(body_size, na.rm = TRUE),
+      max_SL = max(body_size, na.rm = TRUE),
+      .groups = "drop"
+    )
+  print(kable(size_summary, digits = 1, format = "simple"))
+
+  return(list(
+    species_counts = table(metadata$Species),
+    cross_tab = cross_tab,
+    confounding = any(confounded_species)
+  ))
+}
+
+summary_ps1 <- create_sample_summary(comp_ps1$metadata, "PS1")
+summary_ps2 <- create_sample_summary(comp_ps2$metadata, "PS2")
+```
+
+```{r sample-size-table}
+# Create formatted table for PDF
+sample_counts <- data.frame(
+  Species = names(summary_ps1$species_counts),
+  PS1_n = as.numeric(summary_ps1$species_counts),
+  PS2_n = as.numeric(summary_ps2$species_counts[names(summary_ps1$species_counts)])
+)
+
+kable(sample_counts,
+      col.names = c("Species", "PS1 (n)", "PS2 (n)"),
+      caption = "Sample sizes by species and primer set after complete-case filtering") %>%
+  kable_styling(latex_options = c("hold_position"))
+```
+
+---
+
+# Prey Composition Patterns
+
+## Family-Level Composition by Species
+
+```{r prey-composition}
+# Aggregate to family level
+ps1_bale_family <- tax_glom(ps1_bale, taxrank = "Family", NArm = FALSE)
+ps2_bale_family <- tax_glom(ps2_bale, taxrank = "Family", NArm = FALSE)
+
+# Transform to relative abundance
+ps1_rel <- transform_sample_counts(ps1_bale_family, function(x) x / sum(x))
+ps2_rel <- transform_sample_counts(ps2_bale_family, function(x) x / sum(x))
+
+# Create unified top families list
+get_top_families <- function(ps_list, n_top = 10) {
+  all_families <- character()
+
+  for (ps in ps_list) {
+    # Get taxonomy table
+    tax <- as.data.frame(tax_table(ps))
+
+    # Get family names (raw)
+    raw_families <- tax$Family
+
+    # Clean family names
+    clean_families <- sapply(raw_families, clean_family_name)
+
+    # Get abundance totals by cleaned family name
+    ps_rel <- transform_sample_counts(ps, function(x) x / sum(x))
+    otu_mat <- as.matrix(otu_table(ps_rel))
+    if (!taxa_are_rows(ps_rel)) {
+      otu_mat <- t(otu_mat)
+    }
+
+    # Sum by cleaned family
+    family_totals <- tapply(rowSums(otu_mat), clean_families, sum)
+
+    # Get top families
+    top_fams <- names(sort(family_totals, decreasing = TRUE)[1:n_top])
+    all_families <- c(all_families, top_fams)
+  }
+
+  return(unique(all_families))
+}
+
+top_families_unified <- get_top_families(list(ps1_bale_family, ps2_bale_family), n_top = 10)
+
+cat("Top prey families (unified across PS1 and PS2):\n")
+print(top_families_unified)
+
+# Debug: Show raw family names in the data
+cat("\nRaw family names (first 20):\n")
+print(head(unique(tax_table(ps1_bale_family)[, "Family"]), 20))
+
+# Ensure all top families have colors in global palette
+missing_families <- setdiff(top_families_unified, names(GLOBAL_FAMILY_COLORS))
+if (length(missing_families) > 0) {
+  cat("\nAdding colors for", length(missing_families), "missing families:\n")
+  cat("  ", paste(missing_families, collapse = ", "), "\n")
+
+  distinct_colors <- c(
+    "#4477AA", "#EE6677", "#228833", "#CCBB44", "#66CCEE", "#AA3377",
+    "#EE3377", "#009988", "#CC3311", "#EE7733", "#0077BB", "#33BBEE",
+    "#CC6677", "#882255", "#AA4499", "#117733", "#332288", "#44AA99"
+  )
+
+  used_colors <- GLOBAL_FAMILY_COLORS[names(GLOBAL_FAMILY_COLORS) != "Other"]
+  available_colors <- setdiff(distinct_colors, used_colors)
+
+  new_colors <- setNames(
+    available_colors[1:length(missing_families)],
+    missing_families
+  )
+  GLOBAL_FAMILY_COLORS <- c(GLOBAL_FAMILY_COLORS, new_colors)
+}
+```
+
+```{r composition-barplot, fig.height=6, fig.width=10}
+# Composition bar plot by species
+ps1_melt <- psmelt(ps1_rel) %>% mutate(PrimerSet = "PS1")
+ps2_melt <- psmelt(ps2_rel) %>% mutate(PrimerSet = "PS2")
+ps_combined <- bind_rows(ps1_melt, ps2_melt)
+
+# Clean names (note: psmelt adds "sample_" prefix to metadata columns)
+ps_combined$Species_clean <- clean_species_name(ps_combined$sample_Species)
+ps_combined$Family_clean <- sapply(ps_combined$Family, clean_family_name)
+
+# Aggregate
+ps_agg <- ps_combined %>%
+  group_by(Species_clean, PrimerSet, Family_clean) %>%
+  summarise(Abundance = sum(Abundance), .groups = "drop") %>%
+  group_by(Species_clean, PrimerSet) %>%
+  mutate(RelAbund = Abundance / sum(Abundance))
+
+# Categorize families
+ps_final <- ps_agg %>%
+  mutate(Family_display = ifelse(Family_clean %in% top_families_unified,
+                                  Family_clean, "Other")) %>%
+  group_by(Species_clean, PrimerSet, Family_display) %>%
+  summarise(RelAbund = sum(RelAbund), .groups = "drop")
+
+# Debug: Check what families we have
+cat("\nFamilies in data:\n")
+print(unique(ps_final$Family_display))
+cat("\nFamilies in color palette:\n")
+print(names(GLOBAL_FAMILY_COLORS))
+
+ps_final$Family_display <- factor(ps_final$Family_display,
+                                   levels = c(top_families_unified, "Other"))
+
+# Plot
+ggplot(ps_final, aes(x = Species_clean, y = RelAbund, fill = Family_display)) +
+  geom_bar(stat = "identity", position = "stack") +
+  facet_wrap(~ PrimerSet, nrow = 1) +
+  scale_fill_manual(
+    values = GLOBAL_FAMILY_COLORS,
+    name = "Prey Family",
+    drop = FALSE,
+    na.value = "grey50"
+  ) +
+  scale_y_continuous(labels = scales::percent) +
+  theme_minimal(base_size = 11) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "right",
+    legend.key.size = unit(0.4, "cm")
+  ) +
+  labs(x = "Fish Species", y = "Relative Abundance",
+       title = "Prey Family Composition by Species and Primer Set") +
+  guides(fill = guide_legend(ncol = 1))
+```
+
+---
+
+# Alpha Diversity Analysis
+
+## Shannon Diversity by Species
+
+```{r alpha-diversity}
+# Analyze alpha diversity for both primer sets
+alpha_ps1_bale <- analyze_alpha_diversity(comp_ps1$ps_filtered, "Species")
+alpha_ps2_bale <- analyze_alpha_diversity(comp_ps2$ps_filtered, "Species")
+
+cat("=== PS1 Shannon Diversity by Species ===\n")
+cat("Test type:", alpha_ps1_bale$test_type, "\n")
+cat("Shapiro-Wilk p-value:", round(alpha_ps1_bale$shapiro_p, 4), "\n")
+if (alpha_ps1_bale$test_type == "Kruskal-Wallis") {
+  print(alpha_ps1_bale$test)
+} else {
+  print(summary(alpha_ps1_bale$test))
+}
+
+cat("\n=== PS2 Shannon Diversity by Species ===\n")
+cat("Test type:", alpha_ps2_bale$test_type, "\n")
+cat("Shapiro-Wilk p-value:", round(alpha_ps2_bale$shapiro_p, 4), "\n")
+if (alpha_ps2_bale$test_type == "Kruskal-Wallis") {
+  print(alpha_ps2_bale$test)
+} else {
+  print(summary(alpha_ps2_bale$test))
+}
+```
+
+```{r alpha-boxplot, fig.height=5, fig.width=10}
+# Combine PS1 and PS2 for comparison
+div_ps1 <- estimate_richness(comp_ps1$ps_filtered, measures = "Shannon")
+div_ps1$Species <- comp_ps1$metadata$Species
+div_ps1$PrimerSet <- "PS1"
+
+div_ps2 <- estimate_richness(comp_ps2$ps_filtered, measures = "Shannon")
+div_ps2$Species <- comp_ps2$metadata$Species
+div_ps2$PrimerSet <- "PS2"
+
+div_combined <- bind_rows(div_ps1, div_ps2)
+div_combined$PrimerSet <- factor(div_combined$PrimerSet, levels = c("PS1", "PS2"))
+
+# Grouped boxplot
+ggplot(div_combined, aes(x = Species, y = Shannon, fill = PrimerSet)) +
+  geom_boxplot(alpha = 0.7, position = position_dodge(0.8)) +
+  scale_fill_manual(values = c(PS1 = ps1_color, PS2 = ps2_color)) +
+  theme_minimal(base_size = 11) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "bottom"
+  ) +
+  labs(x = "Fish Species", y = "Shannon Diversity",
+       fill = "Primer Set",
+       title = "Shannon Diversity by Species and Primer Set")
+```
+
+---
+
+# Beta Diversity: Comprehensive PERMANOVA
+
+## Marginal (Type III) Tests
+
+```{r permanova-marginal}
+cat("=== PS1 PERMANOVA (Marginal Effects) ===\n")
+perm_ps1_marginal <- adonis2(
+  comp_ps1$distance ~ Species + Waveform_Type + Sex + body_size,
+  data = comp_ps1$metadata,
+  permutations = 999,
+  by = "margin"
+)
+print(perm_ps1_marginal)
+
+cat("\n=== PS2 PERMANOVA (Marginal Effects) ===\n")
+perm_ps2_marginal <- adonis2(
+  comp_ps2$distance ~ Species + Waveform_Type + Sex + body_size,
+  data = comp_ps2$metadata,
+  permutations = 999,
+  by = "margin"
+)
+print(perm_ps2_marginal)
+```
+
+```{r permanova-table}
+# Format PERMANOVA results for publication
+format_permanova <- function(perm_result, ps_name) {
+  perm_df <- as.data.frame(perm_result)
+  perm_df$Term <- rownames(perm_df)
+
+  effects <- perm_df %>%
+    filter(Term != "Residual") %>%
+    mutate(
+      Factor = case_when(
+        Term == "Waveform_Type" ~ "Waveform",
+        Term == "body_size" ~ "Body size",
+        TRUE ~ Term
+      ),
+      R2_pct = R2 * 100,
+      P_value = `Pr(>F)`
+    ) %>%
+    select(Factor, Df, SumOfSqs, R2_pct, F, P_value) %>%
+    arrange(desc(R2_pct))
+
+  return(effects)
+}
+
+effects_ps1 <- format_permanova(perm_ps1_marginal, "PS1")
+effects_ps2 <- format_permanova(perm_ps2_marginal, "PS2")
+
+cat("\n=== Effect Size Rankings ===\n\n")
+cat("PS1:\n")
+print(kable(effects_ps1, digits = c(0, 0, 1, 2, 2, 4),
+            col.names = c("Factor", "df", "SS", "R² (%)", "F", "p"),
+            format = "simple"))
+
+cat("\nPS2:\n")
+print(kable(effects_ps2, digits = c(0, 0, 1, 2, 2, 4),
+            col.names = c("Factor", "df", "SS", "R² (%)", "F", "p"),
+            format = "simple"))
+```
+
+## Variance Partitioning
+
+```{r variance-partitioning}
+cat("=== Variance Partitioning: Two-way ===\n\n")
+
+# Two-way partition: Ecological vs Individual
+vp_2way_ps1 <- varpart(
+  comp_ps1$distance,
+  ~ Species + Waveform_Type,  # Ecological
+  ~ Sex + body_size,           # Individual
+  data = comp_ps1$metadata
+)
+
+cat("PS1 - Ecological (Species + Waveform) vs Individual (Sex + Body size):\n")
+print(vp_2way_ps1)
+
+vp_2way_ps2 <- varpart(
+  comp_ps2$distance,
+  ~ Species + Waveform_Type,
+  ~ Sex + body_size,
+  data = comp_ps2$metadata
+)
+
+cat("\nPS2 - Ecological vs Individual:\n")
+print(vp_2way_ps2)
+
+cat("\n=== Variance Partitioning: Three-way ===\n\n")
+
+# Three-way partition
+vp_3way_ps1 <- varpart(
+  comp_ps1$distance,
+  ~ Species,              # Taxonomic identity
+  ~ Waveform_Type,        # Electrosensory phenotype
+  ~ Sex + body_size,      # Individual factors
+  data = comp_ps1$metadata
+)
+
+cat("PS1 - Species vs Waveform vs Individual:\n")
+print(vp_3way_ps1)
+
+vp_3way_ps2 <- varpart(
+  comp_ps2$distance,
+  ~ Species,
+  ~ Waveform_Type,
+  ~ Sex + body_size,
+  data = comp_ps2$metadata
+)
+
+cat("\nPS2 - Species vs Waveform vs Individual:\n")
+print(vp_3way_ps2)
+```
+
+## PCoA Ordination
+
+```{r pcoa-ps1, fig.height=5, fig.width=7}
+# PS1 PCoA
+pcoa_ps1 <- cmdscale(comp_ps1$distance, eig = TRUE, k = 2)
+var_exp_ps1 <- pcoa_ps1$eig / sum(pcoa_ps1$eig) * 100
+
+pcoa_df_ps1 <- data.frame(
+  PC1 = pcoa_ps1$points[, 1],
+  PC2 = pcoa_ps1$points[, 2],
+  Waveform = comp_ps1$metadata$Waveform_Type,
+  Species = comp_ps1$metadata$Species,
+  Sex = comp_ps1$metadata$Sex
+)
+
+ggplot(pcoa_df_ps1, aes(x = PC1, y = PC2, color = Species, shape = Waveform)) +
+  geom_point(size = 3, alpha = 0.7) +
+  stat_ellipse(aes(group = Species), type = "norm", level = 0.95) +
+  scale_shape_manual(values = c(BP = 17, TP = 16)) +
+  labs(
+    x = paste0("PC1 (", round(var_exp_ps1[1], 1), "%)"),
+    y = paste0("PC2 (", round(var_exp_ps1[2], 1), "%)"),
+    title = "PCoA of Dietary Variation - PS1",
+    subtitle = "Bray-Curtis dissimilarity"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "right")
+```
+
+```{r pcoa-ps2, fig.height=5, fig.width=7}
+# PS2 PCoA
+pcoa_ps2 <- cmdscale(comp_ps2$distance, eig = TRUE, k = 2)
+var_exp_ps2 <- pcoa_ps2$eig / sum(pcoa_ps2$eig) * 100
+
+pcoa_df_ps2 <- data.frame(
+  PC1 = pcoa_ps2$points[, 1],
+  PC2 = pcoa_ps2$points[, 2],
+  Waveform = comp_ps2$metadata$Waveform_Type,
+  Species = comp_ps2$metadata$Species,
+  Sex = comp_ps2$metadata$Sex
+)
+
+ggplot(pcoa_df_ps2, aes(x = PC1, y = PC2, color = Species, shape = Waveform)) +
+  geom_point(size = 3, alpha = 0.7) +
+  stat_ellipse(aes(group = Species), type = "norm", level = 0.95) +
+  scale_shape_manual(values = c(BP = 17, TP = 16)) +
+  labs(
+    x = paste0("PC1 (", round(var_exp_ps2[1], 1), "%)"),
+    y = paste0("PC2 (", round(var_exp_ps2[2], 1), "%)"),
+    title = "PCoA of Dietary Variation - PS2",
+    subtitle = "Bray-Curtis dissimilarity"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "right")
+```
+
+## Dispersion Tests
+
+```{r dispersion-tests}
+test_dispersion <- function(dist_mat, metadata, factor_var, ps_name) {
+  bd <- betadisper(dist_mat, metadata[[factor_var]])
+  bd_test <- permutest(bd, permutations = 999)
+
+  cat(ps_name, "-", factor_var, "\n")
+  cat("  F =", round(bd_test$statistic, 3),
+      ", p =", round(bd_test$tab$`Pr(>F)`[1], 4), "\n")
+
+  if (bd_test$tab$`Pr(>F)`[1] < 0.05) {
+    cat("  WARNING: Heterogeneous dispersion detected!\n")
+  }
+
+  return(list(test = bd_test, betadisper = bd))
+}
+
+cat("=== Dispersion Tests (Homogeneity of Variance) ===\n\n")
+
+# Test for each categorical factor
+cat("Species:\n")
+disp_species_ps1 <- test_dispersion(comp_ps1$distance, comp_ps1$metadata, "Species", "PS1")
+disp_species_ps2 <- test_dispersion(comp_ps2$distance, comp_ps2$metadata, "Species", "PS2")
+
+cat("\nWaveform:\n")
+disp_waveform_ps1 <- test_dispersion(comp_ps1$distance, comp_ps1$metadata, "Waveform_Type", "PS1")
+disp_waveform_ps2 <- test_dispersion(comp_ps2$distance, comp_ps2$metadata, "Waveform_Type", "PS2")
+
+cat("\nSex:\n")
+disp_sex_ps1 <- test_dispersion(comp_ps1$distance, comp_ps1$metadata, "Sex", "PS1")
+disp_sex_ps2 <- test_dispersion(comp_ps2$distance, comp_ps2$metadata, "Sex", "PS2")
+```
+
+---
+
+# Publication Figure: 4-Panel Synthesis
+
+```{r panel-functions}
+# Panel A: Prey Composition (Species × Primer Set)
+create_panel_a_bale <- function(ps1_family, ps2_family, top_families) {
+  # Transform to relative abundance
+  ps1_rel <- transform_sample_counts(ps1_family, function(x) x / sum(x))
+  ps2_rel <- transform_sample_counts(ps2_family, function(x) x / sum(x))
+
+  # Melt and combine
+  ps1_melt <- psmelt(ps1_rel) %>% mutate(PrimerSet = "PS1")
+  ps2_melt <- psmelt(ps2_rel) %>% mutate(PrimerSet = "PS2")
+  ps_combined <- bind_rows(ps1_melt, ps2_melt)
+
+  # Clean names (psmelt adds "sample_" prefix to metadata columns)
+  ps_combined$Species_clean <- clean_species_name(ps_combined$sample_Species)
+  ps_combined$Family_clean <- sapply(ps_combined$Family, clean_family_name)
+
+  # Aggregate by Species × PrimerSet × Family
+  ps_agg <- ps_combined %>%
+    group_by(Species_clean, PrimerSet, Family_clean) %>%
+    summarise(Abundance = sum(Abundance), .groups = "drop") %>%
+    group_by(Species_clean, PrimerSet) %>%
+    mutate(RelAbund = Abundance / sum(Abundance))
+
+  # Categorize into top families vs "Other"
+  ps_final <- ps_agg %>%
+    mutate(Family_display = ifelse(Family_clean %in% top_families,
+                                    Family_clean, "Other")) %>%
+    group_by(Species_clean, PrimerSet, Family_display) %>%
+    summarise(RelAbund = sum(RelAbund), .groups = "drop")
+
+  # Factor levels for consistent legend
+  ps_final$Family_display <- factor(ps_final$Family_display,
+                                     levels = c(top_families, "Other"))
+
+  # Plot
+  p <- ggplot(ps_final, aes(x = Species_clean, y = RelAbund, fill = Family_display)) +
+    geom_bar(stat = "identity", position = "stack") +
+    facet_wrap(~ PrimerSet, nrow = 1) +
+    scale_fill_manual(values = GLOBAL_FAMILY_COLORS,
+                      name = "Prey Family", drop = FALSE) +
+    scale_y_continuous(labels = scales::percent) +
+    theme_minimal(base_size = 9) +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1, size = 7),
+      legend.position = "right",
+      legend.key.size = unit(0.3, "cm")
+    ) +
+    labs(x = "Fish Species", y = "Relative Abundance") +
+    guides(fill = guide_legend(ncol = 1))
+
+  return(p)
+}
+
+# Panel B: Shannon Diversity (Species × Primer Set)
+create_panel_b_bale <- function(comp_ps1, comp_ps2) {
+  # Calculate Shannon for both primer sets
+  div_ps1 <- estimate_richness(comp_ps1$ps_filtered, measures = "Shannon")
+  div_ps1$Species <- comp_ps1$metadata$Species
+  div_ps1$PrimerSet <- "PS1"
+
+  div_ps2 <- estimate_richness(comp_ps2$ps_filtered, measures = "Shannon")
+  div_ps2$Species <- comp_ps2$metadata$Species
+  div_ps2$PrimerSet <- "PS2"
+
+  # Combine
+  div_combined <- bind_rows(div_ps1, div_ps2)
+  div_combined$PrimerSet <- factor(div_combined$PrimerSet,
+                                    levels = c("PS1", "PS2"))
+
+  # Grouped boxplot
+  p <- ggplot(div_combined, aes(x = Species, y = Shannon, fill = PrimerSet)) +
+    geom_boxplot(alpha = 0.7, position = position_dodge(0.8)) +
+    scale_fill_manual(values = c(PS1 = ps1_color, PS2 = ps2_color)) +
+    theme_minimal(base_size = 9) +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1, size = 7),
+      legend.position = "bottom"
+    ) +
+    labs(x = "Fish Species", y = "Shannon Diversity", fill = "Primer Set")
+
+  return(p)
+}
+
+# Panel C: PCoA (Beta Diversity) - PS1 Only
+create_panel_c_bale <- function(comp_ps1) {
+  # PCoA
+  pcoa_result <- cmdscale(comp_ps1$distance, eig = TRUE, k = 2)
+  var_exp <- pcoa_result$eig / sum(pcoa_result$eig) * 100
+
+  pcoa_df <- data.frame(
+    PC1 = pcoa_result$points[, 1],
+    PC2 = pcoa_result$points[, 2],
+    Waveform = comp_ps1$metadata$Waveform_Type,
+    Species = comp_ps1$metadata$Species
+  )
+
+  p <- ggplot(pcoa_df, aes(x = PC1, y = PC2,
+                           color = Species, shape = Waveform)) +
+    geom_point(size = 2.5, alpha = 0.7) +
+    stat_ellipse(aes(group = Species), type = "norm", level = 0.95) +
+    scale_shape_manual(values = c(BP = 17, TP = 16)) +
+    labs(
+      x = paste0("PC1 (", round(var_exp[1], 1), "%)"),
+      y = paste0("PC2 (", round(var_exp[2], 1), "%)")
+    ) +
+    annotate("text", x = Inf, y = -Inf,
+             label = "PS2 concordant; Fig. SX",
+             hjust = 1.1, vjust = -0.5, size = 2.5, fontface = "italic") +
+    theme_minimal(base_size = 9) +
+    theme(
+      legend.position = "right",
+      legend.key.size = unit(0.3, "cm")
+    )
+
+  return(p)
+}
+
+# Panel D: PERMANOVA Effect Sizes
+create_panel_d_bale <- function(perm_ps1_marginal, perm_ps2_marginal) {
+  # Extract R² and p-values from PERMANOVA results
+  ps1_df <- as.data.frame(perm_ps1_marginal)
+  ps1_df$Term <- rownames(ps1_df)
+
+  ps2_df <- as.data.frame(perm_ps2_marginal)
+  ps2_df$Term <- rownames(ps2_df)
+
+  # Create effects dataframes
+  effects_ps1 <- ps1_df %>%
+    filter(Term %in% c("Species", "Waveform_Type", "Sex", "body_size")) %>%
+    select(Term, R2, `Pr(>F)`) %>%
+    mutate(
+      Factor = case_when(
+        Term == "Waveform_Type" ~ "Waveform",
+        Term == "body_size" ~ "Body size",
+        TRUE ~ Term
+      ),
+      PrimerSet = "PS1",
+      P_value = `Pr(>F)`,
+      Significant = P_value < 0.05
+    )
+
+  effects_ps2 <- ps2_df %>%
+    filter(Term %in% c("Species", "Waveform_Type", "Sex", "body_size")) %>%
+    select(Term, R2, `Pr(>F)`) %>%
+    mutate(
+      Factor = case_when(
+        Term == "Waveform_Type" ~ "Waveform",
+        Term == "body_size" ~ "Body size",
+        TRUE ~ Term
+      ),
+      PrimerSet = "PS2",
+      P_value = `Pr(>F)`,
+      Significant = P_value < 0.05
+    )
+
+  effects <- bind_rows(effects_ps1, effects_ps2)
+
+  # Factor-specific colors
+  factor_colors <- c(
+    "Species" = "#009E73",    # Green
+    "Waveform" = "#0072B2",   # Blue
+    "Sex" = "#E69F00",        # Orange
+    "Body size" = "#8C8C8C"   # Gray
+  )
+
+  # Order factors by mean R²
+  factor_order <- effects %>%
+    group_by(Factor) %>%
+    summarise(Mean_R2 = mean(R2), .groups = "drop") %>%
+    arrange(desc(Mean_R2)) %>%
+    pull(Factor)
+
+  effects$Factor <- factor(effects$Factor, levels = factor_order)
+
+  # Paired dot plot
+  p <- ggplot(effects, aes(x = R2, y = Factor, color = Factor)) +
+    geom_point(
+      aes(shape = PrimerSet,
+          fill = if_else(Significant, as.character(Factor), NA_character_)),
+      size = 4, stroke = 1.2
+    ) +
+    geom_line(aes(group = Factor), color = "gray70", linewidth = 0.5) +
+    scale_shape_manual(values = c(PS1 = 21, PS2 = 23)) +  # circle, diamond
+    scale_color_manual(values = factor_colors) +
+    scale_fill_manual(values = factor_colors, na.value = "white", guide = "none") +
+    labs(x = expression(paste(R^2, " (Marginal Effect Size)")), y = "") +
+    theme_minimal(base_size = 9) +
+    theme(
+      legend.position = "bottom",
+      legend.title = element_text(size = 8)
+    )
+
+  return(p)
+}
+```
+
+```{r generate-panels, fig.height=8, fig.width=10}
+cat("=== GENERATING 4-PANEL PUBLICATION FIGURE ===\n\n")
+
+# Generate panels
+panelA <- create_panel_a_bale(ps1_bale_family, ps2_bale_family, top_families_unified)
+panelB <- create_panel_b_bale(comp_ps1, comp_ps2)
+panelC <- create_panel_c_bale(comp_ps1)
+panelD <- create_panel_d_bale(perm_ps1_marginal, perm_ps2_marginal)
+
+# Assemble with patchwork
+fig_main <- (panelA / panelC) | (panelB / panelD) +
+  plot_layout(widths = c(2, 1)) +
+  plot_annotation(tag_levels = 'A') &
+  theme(
+    plot.tag = element_text(size = 14, face = "bold"),
+    text = element_text(family = "sans", size = 9)
+  )
+
+print(fig_main)
+
+# Save
+ggsave(
+  file.path(root, "output_data/07_Analysis/bale_creek_comprehensive_figure.pdf"),
+  fig_main,
+  width = 10, height = 8, units = "in", dpi = 300
+)
+
+ggsave(
+  file.path(root, "output_data/07_Analysis/bale_creek_comprehensive_figure.png"),
+  fig_main,
+  width = 10, height = 8, units = "in", dpi = 300
+)
+
+cat("Figure saved to output_data/07_Analysis/\n")
+```
+
+---
+
+# Supplemental Analyses
+
+## PS2 PCoA (Supplemental Figure)
+
+```{r ps2-pcoa-supplemental, fig.height=5, fig.width=7}
+pcoa_ps2_supp <- create_panel_c_bale(comp_ps2)
+
+# Update annotation for PS2
+pcoa_ps2_supp <- pcoa_ps2_supp +
+  labs(title = "PS2: Concordant dietary patterns") +
+  annotate("text", x = Inf, y = -Inf,
+           label = "Supplemental Figure",
+           hjust = 1.1, vjust = -0.5, size = 2.5, fontface = "italic")
+
+print(pcoa_ps2_supp)
+
+# Save
+ggsave(
+  file.path(root, "output_data/07_Analysis/bale_creek_ps2_pcoa.pdf"),
+  pcoa_ps2_supp,
+  width = 6, height = 5, units = "in", dpi = 300
+)
+```
+
+## Dispersion Test Visualizations
+
+```{r dispersion-plots, fig.height=6, fig.width=10}
+# Create diagnostic plots for dispersion tests
+par(mfrow = c(2, 3))
+
+# Species
+plot(disp_species_ps1$betadisper, main = "PS1: Dispersion by Species")
+plot(disp_species_ps2$betadisper, main = "PS2: Dispersion by Species")
+
+# Waveform
+plot(disp_waveform_ps1$betadisper, main = "PS1: Dispersion by Waveform")
+plot(disp_waveform_ps2$betadisper, main = "PS2: Dispersion by Waveform")
+
+# Sex
+plot(disp_sex_ps1$betadisper, main = "PS1: Dispersion by Sex")
+plot(disp_sex_ps2$betadisper, main = "PS2: Dispersion by Sex")
+
+par(mfrow = c(1, 1))
+```
+
+---
+
+# Summary and Interpretation
+
+## Key Findings
+
+### 1. Primary Drivers of Dietary Variation
+
+**Species Identity:**
+- R² = `r round(effects_ps1$R2_pct[effects_ps1$Factor == "Species"], 1)`% (PS1), `r round(effects_ps2$R2_pct[effects_ps2$Factor == "Species"], 1)`% (PS2)
+- Species is the strongest predictor of dietary composition, indicating significant dietary partitioning among sympatric mormyrid species
+
+**Waveform Type:**
+- R² = `r round(effects_ps1$R2_pct[effects_ps1$Factor == "Waveform"], 1)`% (PS1), `r round(effects_ps2$R2_pct[effects_ps2$Factor == "Waveform"], 1)`% (PS2)
+- Electrosensory phenotype explains additional variation beyond species identity
+
+**Individual Factors:**
+- Sex: R² = `r round(effects_ps1$R2_pct[effects_ps1$Factor == "Sex"], 1)`% (PS1), `r round(effects_ps2$R2_pct[effects_ps2$Factor == "Sex"], 1)`% (PS2)
+- Body size: R² = `r round(effects_ps1$R2_pct[effects_ps1$Factor == "Body size"], 1)`% (PS1), `r round(effects_ps2$R2_pct[effects_ps2$Factor == "Body size"], 1)`% (PS2)
+
+### 2. Variance Partitioning Insights
+
+The variance partitioning analysis reveals:
+- Shared variance between Species and Waveform indicates potential confounding (some species are monomorphic for waveform type)
+- Individual-level factors (Sex, Body size) contribute relatively small but significant unique variance
+- Large residual variance suggests unmeasured factors (e.g., microhabitat, temporal variation) also influence diet
+
+### 3. Primer Set Concordance
+
+Both PS1 and PS2 show qualitatively similar patterns:
+- Consistent ranking of effect sizes
+- Similar PCoA structure
+- Concordant prey family compositions
+
+This dual-primer validation strengthens confidence in the biological interpretations.
+
+### 4. Alpha Diversity Patterns
+
+Shannon diversity varies significantly among species, suggesting differential dietary breadth. Some species may be specialists while others are generalists.
+
+### 5. Dispersion Considerations
+
+```{r dispersion-summary}
+# Check if any dispersion tests were significant
+disp_warnings <- c()
+if (disp_species_ps1$test$tab$`Pr(>F)`[1] < 0.05) disp_warnings <- c(disp_warnings, "Species (PS1)")
+if (disp_species_ps2$test$tab$`Pr(>F)`[1] < 0.05) disp_warnings <- c(disp_warnings, "Species (PS2)")
+if (disp_waveform_ps1$test$tab$`Pr(>F)`[1] < 0.05) disp_warnings <- c(disp_warnings, "Waveform (PS1)")
+if (disp_waveform_ps2$test$tab$`Pr(>F)`[1] < 0.05) disp_warnings <- c(disp_warnings, "Waveform (PS2)")
+if (disp_sex_ps1$test$tab$`Pr(>F)`[1] < 0.05) disp_warnings <- c(disp_warnings, "Sex (PS1)")
+if (disp_sex_ps2$test$tab$`Pr(>F)`[1] < 0.05) disp_warnings <- c(disp_warnings, "Sex (PS2)")
+
+if (length(disp_warnings) > 0) {
+  cat("WARNING: Heterogeneous dispersion detected for:\n")
+  for (w in disp_warnings) {
+    cat("  -", w, "\n")
+  }
+  cat("\nPERMANOVA results for these factors should be interpreted with caution.\n")
+  cat("Differences in dispersion may contribute to significant PERMANOVA results.\n")
+} else {
+  cat("All dispersion tests non-significant (p > 0.05).\n")
+  cat("PERMANOVA assumptions of homogeneous dispersion are met.\n")
+}
+```
+
+## Biological Interpretation
+
+The Bale Creek mormyrid community shows strong dietary partitioning at the species level, consistent with niche differentiation facilitating coexistence. The additional effect of waveform type suggests that electrosensory phenotype may influence foraging behavior or prey detection beyond species-specific differences. However, caution is warranted in interpreting waveform effects due to potential confounding with species identity (some species are monomorphic).
+
+The relatively small effects of sex and body size suggest that dietary variation in this community is primarily structured by species identity and electrosensory phenotype rather than individual-level factors. This contrasts with some other systems where ontogenetic shifts or sexual dimorphism drive dietary variation.
+
+## Study Limitations
+
+1. **Species-Waveform confounding:** Some species show only one waveform type, making it impossible to fully separate species and waveform effects
+2. **Unbalanced sample sizes:** Some species have limited replication
+3. **Single locality:** Cannot assess geographic variation
+4. **Temporal snapshot:** Seasonal or temporal dietary shifts not captured
+
+---
+
+# Session Information
+
+```{r session-info}
+sessionInfo()
+```

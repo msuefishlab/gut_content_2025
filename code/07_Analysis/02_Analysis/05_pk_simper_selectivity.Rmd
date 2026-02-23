@@ -1,0 +1,1637 @@
+---
+title: "LEVEL 4 Supplement: SIMPER and Selectivity Analyses"
+author: "Gorsuch, Picq, Gallant"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    toc: true
+    latex_engine: xelatex
+    keep_tex: false
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    code_folding: hide
+    theme: flatly
+    df_print: paged
+knit: (function(inputFile, encoding) { root <- rprojroot::find_root(".git/index"); rmarkdown::render(inputFile, encoding = encoding, output_dir = file.path(root, "output_data/07_Analysis")) })
+header-includes:
+- \usepackage{longtable}
+- \usepackage{booktabs}
+- \usepackage{float}
+- \usepackage{array}
+- \usepackage{pdflscape}
+---
+
+```{r setup, include=FALSE}
+# Configure knitr
+knitr::opts_chunk$set(
+  echo = FALSE,
+  warning = FALSE,
+  message = FALSE,
+  fig.width = 7,
+  fig.height = 4.5,
+  dpi = 300
+)
+
+# Set root path and source core setup
+root <- rprojroot::find_root(".git/index")
+source(file.path(root, "code/07_Analysis/core_setup.R"))
+```
+
+# Overview
+
+This document contains focused analyses on:
+1. **SIMPER analyses (4.3b-g)**: Identifying prey families that drive waveform and regional dietary differences
+2. **Prey selectivity analyses (4.6-4.7)**: Testing whether compositional differences reflect active selection or passive availability
+
+These sections are extracted from the comprehensive Level 4 analysis for detailed examination and manuscript preparation.
+
+---
+
+## Data Preparation
+
+This section creates the data objects needed for SIMPER and selectivity analyses.
+
+```{r data-prep}
+cat("=== DATA PREPARATION ===\n")
+
+# Add Region variable to phyloseq objects
+add_region_variable <- function(ps) {
+  meta <- data.frame(sample_data(ps))
+
+  # Define regions based on locality
+  # North: Mengono Creek, Iboundji Creek
+  # South: Bambomo Creek, Ipassa Creek
+  meta$Region <- ifelse(meta$Locality_Name %in% c("Mengono Creek", "Iboundji Creek"),
+    "North", "South"
+  )
+
+  # Update sample data
+  sample_data(ps) <- meta
+  return(ps)
+}
+
+ps1_pk <- add_region_variable(ps1_pk)
+ps2_pk <- add_region_variable(ps2_pk)
+
+cat("Region variable added to phyloseq objects.\n")
+
+# Create distance matrices and metadata for beta diversity
+# PS1
+otu1_pk <- as.matrix(otu_table(ps1_pk))
+if (taxa_are_rows(ps1_pk)) {
+  otu1_pk <- t(otu1_pk)
+}
+
+meta1_pk_beta <- data.frame(sample_data(ps1_pk), stringsAsFactors = FALSE)
+meta1_pk_beta$Region <- factor(
+  ifelse(meta1_pk_beta$Locality_Name %in% c("Mengono Creek", "Iboundji Creek"),
+    "North", "South"
+  ),
+  levels = c("North", "South")
+)
+meta1_pk_beta$Waveform_Type <- factor(meta1_pk_beta$Waveform_Type)
+rownames(meta1_pk_beta) <- rownames(otu1_pk)
+dist1_pk <- vegdist(otu1_pk, method = "bray")
+
+cat("PS1: Distance matrix created (Bray-Curtis)\n")
+
+# PS2
+otu2_pk <- as.matrix(otu_table(ps2_pk))
+if (taxa_are_rows(ps2_pk)) {
+  otu2_pk <- t(otu2_pk)
+}
+
+meta2_pk_beta <- data.frame(sample_data(ps2_pk), stringsAsFactors = FALSE)
+meta2_pk_beta$Region <- factor(
+  ifelse(meta2_pk_beta$Locality_Name %in% c("Mengono Creek", "Iboundji Creek"),
+    "North", "South"
+  ),
+  levels = c("North", "South")
+)
+meta2_pk_beta$Waveform_Type <- factor(meta2_pk_beta$Waveform_Type)
+rownames(meta2_pk_beta) <- rownames(otu2_pk)
+dist2_pk <- vegdist(otu2_pk, method = "bray")
+
+cat("PS2: Distance matrix created (Bray-Curtis)\n")
+
+cat("\nData preparation complete.\n")
+cat("  PS1: ", nrow(otu1_pk), " samples, ", ncol(otu1_pk), " ASVs\n", sep = "")
+cat("  PS2: ", nrow(otu2_pk), " samples, ", ncol(otu2_pk), " ASVs\n", sep = "")
+```
+
+---
+
+## 4.3b SIMPER Analysis: Waveform Differences (BP vs TP)
+
+Identify which prey families contribute most to dietary dissimilarity between BP and TP waveforms.
+
+```{r level4-simper-waveform, fig.width=10, fig.height=8}
+cat("=== LEVEL 4.3b: SIMPER ANALYSIS - WAVEFORM DIFFERENCES ===\n")
+cat("Identifying prey families driving BP vs. TP dissimilarity\n\n")
+
+run_simper_waveform <- function(ps, primerset_name) {
+  cat("\n", primerset_name, ":\n", sep = "")
+
+  # Get OTU table (samples as rows, taxa as columns)
+  otu_mat <- as.matrix(otu_table(ps))
+  if (taxa_are_rows(ps)) {
+    otu_mat <- t(otu_mat)
+  }
+
+  # Get metadata
+  meta <- data.frame(sample_data(ps))
+
+  # Check if there are at least 2 different waveform groups
+  n_groups <- length(unique(meta$Waveform_Type))
+  cat("Number of unique waveform groups:", n_groups, "\n")
+
+  if (n_groups < 2) {
+    cat("Insufficient waveform groups for SIMPER analysis (need at least 2)\n")
+    cat("Waveform groups present:", paste(unique(meta$Waveform_Type), collapse = ", "), "\n\n")
+    return(NULL)
+  }
+
+  # Run SIMPER
+  simper_result <- vegan::simper(otu_mat, meta$Waveform_Type, permutations = 999)
+
+  # Extract first comparison (BP_TP or TP_BP)
+  comparison_name <- names(simper_result)[1]
+  comp <- simper_result[[comparison_name]]
+
+  cat(
+    "Overall dissimilarity between waveforms:",
+    round(comp$overall, 3), "\n\n"
+  )
+
+  # Build data frame from simper result (ASV level)
+  comparison_data <- data.frame(
+    species = comp$species,
+    average = comp$average,
+    sd = comp$sd,
+    ratio = comp$ratio,
+    ava = comp$ava,
+    avb = comp$avb,
+    stringsAsFactors = FALSE
+  )
+
+  # Calculate contribution percentage
+  comparison_data$contr <- comparison_data$average / comp$overall
+
+  # Sort by contribution
+  comparison_data <- comparison_data[order(-comparison_data$contr), ]
+
+  # Calculate cumulative sum
+  comparison_data$cumsum <- cumsum(comparison_data$contr)
+
+  # Get top contributors (cumulative < 70%)
+  top_asvs <- comparison_data[comparison_data$cumsum <= 0.70, ]
+  if (nrow(top_asvs) == 0) {
+    top_asvs <- head(comparison_data, 15)
+  }
+
+  # Get taxonomy
+  tax_df <- as.data.frame(tax_table(ps))
+  top_asvs$ASV <- top_asvs$species
+
+  # Add Family names
+  top_asvs$Family <- sapply(top_asvs$ASV, function(asv) {
+    if (asv %in% rownames(tax_df)) {
+      fam <- tax_df[asv, "Family"]
+      if (is.na(fam) || fam == "") {
+        return(tax_df[asv, "Order"])
+      }
+      return(clean_family_name(fam))
+    }
+    return("Unknown")
+  })
+
+  # Aggregate by Family
+  family_aggregated <- top_asvs %>%
+    group_by(Family) %>%
+    summarise(
+      contr_pct = 100 * sum(contr),
+      n_asvs = n(),
+      .groups = "drop"
+    ) %>%
+    arrange(desc(contr_pct))
+
+  # Print table
+  print(kable(family_aggregated,
+    digits = 2,
+    caption = paste0(
+      "Top prey families driving waveform differences (",
+      primerset_name, ")"
+    ),
+    col.names = c("Family", "Contribution (%)", "N ASVs"),
+    booktabs = TRUE,
+    row.names = FALSE
+  ) %>%
+    kable_styling(
+      bootstrap_options = c("striped", "hover"),
+      full_width = FALSE
+    ))
+
+  # Create bar plot
+  family_aggregated$Family <- factor(family_aggregated$Family,
+    levels = rev(family_aggregated$Family)
+  )
+
+  p <- ggplot(family_aggregated, aes(x = contr_pct, y = Family)) +
+    geom_bar(stat = "identity", fill = "steelblue", alpha = 0.7) +
+    theme_minimal() +
+    labs(
+      title = paste0(
+        "Top Prey Families Driving Waveform Differences (",
+        primerset_name, ")"
+      ),
+      x = "Contribution to Dissimilarity (%)",
+      y = "Prey Family"
+    )
+
+  return(list(simper = simper_result, plot = p, table = family_aggregated))
+}
+
+# Run SIMPER for both primer sets
+simper_waveform_ps1 <- run_simper_waveform(ps1_pk, "PRIMERSET 1")
+simper_waveform_ps2 <- run_simper_waveform(ps2_pk, "PRIMERSET 2")
+
+# Plot results
+if (!is.null(simper_waveform_ps1)) {
+  print(simper_waveform_ps1$plot)
+}
+if (!is.null(simper_waveform_ps2)) {
+  print(simper_waveform_ps2$plot)
+}
+```
+
+## 4.3c SIMPER Analysis: Region Differences (North vs South)
+
+Identify which prey families contribute most to dietary dissimilarity between North and South regions.
+
+```{r level4-simper-region, fig.width=10, fig.height=8}
+cat("=== LEVEL 4.3c: SIMPER ANALYSIS - REGION DIFFERENCES ===\n")
+cat("Identifying prey families driving North vs. South dissimilarity\n\n")
+
+run_simper_region <- function(ps, primerset_name) {
+  cat("\n", primerset_name, ":\n", sep = "")
+
+  # Get OTU table (samples as rows, taxa as columns)
+  otu_mat <- as.matrix(otu_table(ps))
+  if (taxa_are_rows(ps)) {
+    otu_mat <- t(otu_mat)
+  }
+
+  # Get metadata
+  meta <- data.frame(sample_data(ps))
+
+  # Check if there are at least 2 different region groups
+  n_groups <- length(unique(meta$Region))
+  cat("Number of unique region groups:", n_groups, "\n")
+
+  if (n_groups < 2) {
+    cat("Insufficient region groups for SIMPER analysis (need at least 2)\n")
+    cat("Region groups present:", paste(unique(meta$Region), collapse = ", "), "\n\n")
+    return(NULL)
+  }
+
+  # Run SIMPER
+  simper_result <- vegan::simper(otu_mat, meta$Region, permutations = 999)
+
+  # Extract first comparison (North_South or South_North)
+  comparison_name <- names(simper_result)[1]
+  comp <- simper_result[[comparison_name]]
+
+  cat(
+    "Overall dissimilarity between regions:",
+    round(comp$overall, 3), "\n\n"
+  )
+
+  # Build data frame from simper result (ASV level)
+  comparison_data <- data.frame(
+    species = comp$species,
+    average = comp$average,
+    sd = comp$sd,
+    ratio = comp$ratio,
+    ava = comp$ava,
+    avb = comp$avb,
+    stringsAsFactors = FALSE
+  )
+
+  # Calculate contribution percentage
+  comparison_data$contr <- comparison_data$average / comp$overall
+
+  # Sort by contribution
+  comparison_data <- comparison_data[order(-comparison_data$contr), ]
+
+  # Calculate cumulative sum
+  comparison_data$cumsum <- cumsum(comparison_data$contr)
+
+  # Get top contributors (cumulative < 70%)
+  top_asvs <- comparison_data[comparison_data$cumsum <= 0.70, ]
+  if (nrow(top_asvs) == 0) {
+    top_asvs <- head(comparison_data, 15)
+  }
+
+  # Get taxonomy
+  tax_df <- as.data.frame(tax_table(ps))
+  top_asvs$ASV <- top_asvs$species
+
+  # Add Family names
+  top_asvs$Family <- sapply(top_asvs$ASV, function(asv) {
+    if (asv %in% rownames(tax_df)) {
+      fam <- tax_df[asv, "Family"]
+      if (is.na(fam) || fam == "") {
+        return(tax_df[asv, "Order"])
+      }
+      return(clean_family_name(fam))
+    }
+    return("Unknown")
+  })
+
+  # Aggregate by Family
+  family_aggregated <- top_asvs %>%
+    group_by(Family) %>%
+    summarise(
+      contr_pct = 100 * sum(contr),
+      n_asvs = n(),
+      .groups = "drop"
+    ) %>%
+    arrange(desc(contr_pct))
+
+  # Print table
+  print(kable(family_aggregated,
+    digits = 2,
+    caption = paste0(
+      "Top prey families driving region differences (",
+      primerset_name, ")"
+    ),
+    col.names = c("Family", "Contribution (%)", "N ASVs"),
+    booktabs = TRUE,
+    row.names = FALSE
+  ) %>%
+    kable_styling(
+      bootstrap_options = c("striped", "hover"),
+      full_width = FALSE
+    ))
+
+  # Create bar plot
+  family_aggregated$Family <- factor(family_aggregated$Family,
+    levels = rev(family_aggregated$Family)
+  )
+
+  p <- ggplot(family_aggregated, aes(x = contr_pct, y = Family)) +
+    geom_bar(stat = "identity", fill = "darkgreen", alpha = 0.7) +
+    theme_minimal() +
+    labs(
+      title = paste0(
+        "Top Prey Families Driving Region Differences (",
+        primerset_name, ")"
+      ),
+      x = "Contribution to Dissimilarity (%)",
+      y = "Prey Family"
+    )
+
+  return(list(simper = simper_result, plot = p, table = family_aggregated))
+}
+
+# Run SIMPER for both primer sets
+simper_region_ps1 <- run_simper_region(ps1_pk, "PRIMERSET 1")
+simper_region_ps2 <- run_simper_region(ps2_pk, "PRIMERSET 2")
+
+# Plot results
+if (!is.null(simper_region_ps1)) {
+  print(simper_region_ps1$plot)
+}
+if (!is.null(simper_region_ps2)) {
+  print(simper_region_ps2$plot)
+}
+```
+
+## SIMPER Summary Table
+
+Consolidated summary of families contributing > 5% to dissimilarity across both comparisons (BP vs TP, North vs South) and both primersets.
+
+```{r simper-summary-table}
+cat("=== SIMPER SUMMARY TABLE ===\n")
+cat("Families contributing > 2.5% to dissimilarity\n\n")
+
+# Create a list to store results
+summary_list <- list()
+
+# Process PS1 waveform results
+if (!is.null(simper_waveform_ps1) && !is.null(simper_waveform_ps1$table)) {
+  ps1_wf <- simper_waveform_ps1$table %>%
+    filter(contr_pct > 2.5) %>%
+    mutate(
+      Comparison = "BP vs TP",
+      Primerset = "PS1",
+      Contribution = contr_pct
+    ) %>%
+    select(Family, Comparison, Primerset, Contribution)
+  summary_list[[1]] <- ps1_wf
+}
+
+# Process PS2 waveform results
+if (!is.null(simper_waveform_ps2) && !is.null(simper_waveform_ps2$table)) {
+  ps2_wf <- simper_waveform_ps2$table %>%
+    filter(contr_pct > 2.5) %>%
+    mutate(
+      Comparison = "BP vs TP",
+      Primerset = "PS2",
+      Contribution = contr_pct
+    ) %>%
+    select(Family, Comparison, Primerset, Contribution)
+  summary_list[[2]] <- ps2_wf
+}
+
+# Process PS1 region results
+if (!is.null(simper_region_ps1) && !is.null(simper_region_ps1$table)) {
+  ps1_reg <- simper_region_ps1$table %>%
+    filter(contr_pct > 2.5) %>%
+    mutate(
+      Comparison = "North vs South",
+      Primerset = "PS1",
+      Contribution = contr_pct
+    ) %>%
+    select(Family, Comparison, Primerset, Contribution)
+  summary_list[[3]] <- ps1_reg
+}
+
+# Process PS2 region results
+if (!is.null(simper_region_ps2) && !is.null(simper_region_ps2$table)) {
+  ps2_reg <- simper_region_ps2$table %>%
+    filter(contr_pct > 2.5) %>%
+    mutate(
+      Comparison = "North vs South",
+      Primerset = "PS2",
+      Contribution = contr_pct
+    ) %>%
+    select(Family, Comparison, Primerset, Contribution)
+  summary_list[[4]] <- ps2_reg
+}
+
+# Combine all results
+if (length(summary_list) > 0) {
+  simper_summary <- bind_rows(summary_list) %>%
+    arrange(Comparison, Primerset, desc(Contribution))
+
+  # Print the table
+  print(kable(simper_summary,
+    digits = 2,
+    caption = "Summary of SIMPER Analysis: Families Contributing > 5% to Dissimilarity",
+    col.names = c("Family", "Comparison", "Primerset", "Contribution (%)"),
+    booktabs = TRUE,
+    row.names = FALSE
+  ) %>%
+    kable_styling(
+      bootstrap_options = c("striped", "hover"),
+      full_width = FALSE
+    ))
+} else {
+  cat("No SIMPER results available for summary table.\n")
+}
+```
+
+## 4.3d Mechanistic Drill-Down: Waveform Differences
+
+Partition waveform-related dissimilarity into turnover (species replacement) vs. abundance (differential abundance) components for each contributing family.
+
+```{r level4-waveform-drilldown, fig.width=12, fig.height=10}
+cat("=== LEVEL 4.3d: MECHANISTIC DRILL-DOWN - WAVEFORM DIFFERENCES ===\n")
+cat("Partitioning dissimilarity into turnover vs. abundance components\n\n")
+
+# Check if SIMPER results exist
+if (!is.null(simper_waveform_ps1) && !is.null(simper_waveform_ps1$table)) {
+  cat("=== PRIMERSET 1: WAVEFORM DRILL-DOWN ===\n")
+
+  # Extract SIMPER table
+  simper_waveform_ps1_table <- simper_waveform_ps1$table
+
+  # Run drill-down
+  drilldown_waveform_ps1 <- run_multi_family_drilldown(
+    ps = ps1_pk,
+    simper_table = simper_waveform_ps1_table,
+    group_var = "Waveform_Type",
+    group1 = "BP",
+    group2 = "TP",
+    primerset_name = "PRIMERSET 1",
+    contr_threshold = 5,
+    max_families = 10
+  )
+
+  # Generate summary
+  if (length(drilldown_waveform_ps1) > 0) {
+    summary_waveform_ps1 <- summarize_drilldown_results(drilldown_waveform_ps1)
+
+    cat("\n\nSummary Table:\n")
+    print(kable(summary_waveform_ps1,
+      digits = 2,
+      caption = "PRIMERSET 1: Waveform Differences - Turnover vs Abundance",
+      booktabs = TRUE
+    ) %>%
+      kable_styling(
+        bootstrap_options = c("striped", "hover"),
+        full_width = FALSE,
+        font_size = 9
+      ))
+
+    # Plot summary
+    p1 <- plot_drilldown_summary(
+      summary_waveform_ps1,
+      "PRIMERSET 1: Waveform Differences (BP vs TP)"
+    )
+    print(p1)
+  }
+} else {
+  cat("PRIMERSET 1: SIMPER results not available for waveform drill-down\n")
+}
+
+# Primerset 2
+if (!is.null(simper_waveform_ps2) && !is.null(simper_waveform_ps2$table)) {
+  cat("\n\n=== PRIMERSET 2: WAVEFORM DRILL-DOWN ===\n")
+
+  simper_waveform_ps2_table <- simper_waveform_ps2$table
+
+  drilldown_waveform_ps2 <- run_multi_family_drilldown(
+    ps = ps2_pk,
+    simper_table = simper_waveform_ps2_table,
+    group_var = "Waveform_Type",
+    group1 = "BP",
+    group2 = "TP",
+    primerset_name = "PRIMERSET 2",
+    contr_threshold = 5,
+    max_families = 10
+  )
+
+  if (length(drilldown_waveform_ps2) > 0) {
+    summary_waveform_ps2 <- summarize_drilldown_results(drilldown_waveform_ps2)
+
+    cat("\n\nSummary Table:\n")
+    print(kable(summary_waveform_ps2,
+      digits = 2,
+      caption = "PRIMERSET 2: Waveform Differences - Turnover vs Abundance",
+      booktabs = TRUE
+    ) %>%
+      kable_styling(
+        bootstrap_options = c("striped", "hover"),
+        full_width = FALSE,
+        font_size = 9
+      ))
+
+    p2 <- plot_drilldown_summary(
+      summary_waveform_ps2,
+      "PRIMERSET 2: Waveform Differences (BP vs TP)"
+    )
+    print(p2)
+  }
+} else {
+  cat("PRIMERSET 2: SIMPER results not available for waveform drill-down\n")
+}
+```
+
+## 4.3e Mechanistic Drill-Down: Region Differences
+
+Partition region-related dissimilarity into turnover vs. abundance components for each contributing family.
+
+```{r level4-region-drilldown, fig.width=12, fig.height=10}
+cat("=== LEVEL 4.3e: MECHANISTIC DRILL-DOWN - REGION DIFFERENCES ===\n")
+cat("Partitioning dissimilarity into turnover vs. abundance components\n\n")
+
+# Check if SIMPER results exist
+if (!is.null(simper_region_ps1) && !is.null(simper_region_ps1$table)) {
+  cat("=== PRIMERSET 1: REGION DRILL-DOWN ===\n")
+
+  # Extract SIMPER table
+  simper_region_ps1_table <- simper_region_ps1$table
+
+  # Run drill-down
+  drilldown_region_ps1 <- run_multi_family_drilldown(
+    ps = ps1_pk,
+    simper_table = simper_region_ps1_table,
+    group_var = "Region",
+    group1 = "North",
+    group2 = "South",
+    primerset_name = "PRIMERSET 1",
+    contr_threshold = 5,
+    max_families = 10
+  )
+
+  # Generate summary
+  if (length(drilldown_region_ps1) > 0) {
+    summary_region_ps1 <- summarize_drilldown_results(drilldown_region_ps1)
+
+    cat("\n\nSummary Table:\n")
+    print(kable(summary_region_ps1,
+      digits = 2,
+      caption = "PRIMERSET 1: Region Differences - Turnover vs Abundance",
+      booktabs = TRUE
+    ) %>%
+      kable_styling(
+        bootstrap_options = c("striped", "hover"),
+        full_width = FALSE,
+        font_size = 9
+      ))
+
+    # Plot summary
+    p1 <- plot_drilldown_summary(
+      summary_region_ps1,
+      "PRIMERSET 1: Region Differences (North vs South)"
+    )
+    print(p1)
+  }
+} else {
+  cat("PRIMERSET 1: SIMPER results not available for region drill-down\n")
+}
+
+# Primerset 2
+if (!is.null(simper_region_ps2) && !is.null(simper_region_ps2$table)) {
+  cat("\n\n=== PRIMERSET 2: REGION DRILL-DOWN ===\n")
+
+  simper_region_ps2_table <- simper_region_ps2$table
+
+  drilldown_region_ps2 <- run_multi_family_drilldown(
+    ps = ps2_pk,
+    simper_table = simper_region_ps2_table,
+    group_var = "Region",
+    group1 = "North",
+    group2 = "South",
+    primerset_name = "PRIMERSET 2",
+    contr_threshold = 5,
+    max_families = 10
+  )
+
+  if (length(drilldown_region_ps2) > 0) {
+    summary_region_ps2 <- summarize_drilldown_results(drilldown_region_ps2)
+
+    cat("\n\nSummary Table:\n")
+    print(kable(summary_region_ps2,
+      digits = 2,
+      caption = "PRIMERSET 2: Region Differences - Turnover vs Abundance",
+      booktabs = TRUE
+    ) %>%
+      kable_styling(
+        bootstrap_options = c("striped", "hover"),
+        full_width = FALSE,
+        font_size = 9
+      ))
+
+    p2 <- plot_drilldown_summary(
+      summary_region_ps2,
+      "PRIMERSET 2: Region Differences (North vs South)"
+    )
+    print(p2)
+  }
+} else {
+  cat("PRIMERSET 2: SIMPER results not available for region drill-down\n")
+}
+```
+
+## 4.3f ASV-Level Visualization: Waveform Differences
+
+Two-panel figure showing ASV-level patterns driving waveform differences.
+
+```{r level4-waveform-asv-viz, fig.width=14, fig.height=7}
+cat("=== LEVEL 4.3f: ASV-LEVEL VISUALIZATION - WAVEFORM DIFFERENCES ===\n\n")
+
+# PRIMERSET 1
+if (!is.null(simper_waveform_ps1) && !is.null(simper_waveform_ps1$simper)) {
+  cat("Creating two-panel ASV figure for PRIMERSET 1...\n")
+
+  comp_name_ps1 <- names(simper_waveform_ps1$simper)[1]
+
+  fig_waveform_ps1 <- create_asv_twopanel_figure(
+    ps = ps1_pk,
+    simper_result = simper_waveform_ps1$simper,
+    comparison_name = comp_name_ps1,
+    group_var = "Waveform_Type",
+    group1 = "BP",
+    group2 = "TP",
+    main_title = "PRIMERSET 1: Waveform Differences at ASV Level",
+    top_n = 15
+  )
+
+  print(fig_waveform_ps1)
+} else {
+  cat("PRIMERSET 1: SIMPER results not available for ASV visualization\n")
+}
+
+# PRIMERSET 2
+if (!is.null(simper_waveform_ps2) && !is.null(simper_waveform_ps2$simper)) {
+  cat("\n\nCreating two-panel ASV figure for PRIMERSET 2...\n")
+
+  comp_name_ps2 <- names(simper_waveform_ps2$simper)[1]
+
+  fig_waveform_ps2 <- create_asv_twopanel_figure(
+    ps = ps2_pk,
+    simper_result = simper_waveform_ps2$simper,
+    comparison_name = comp_name_ps2,
+    group_var = "Waveform_Type",
+    group1 = "BP",
+    group2 = "TP",
+    main_title = "PRIMERSET 2: Waveform Differences at ASV Level",
+    top_n = 15
+  )
+
+  print(fig_waveform_ps2)
+} else {
+  cat("PRIMERSET 2: SIMPER results not available for ASV visualization\n")
+}
+```
+
+## 4.3g ASV-Level Visualization: Region Differences
+
+Two-panel figure showing ASV-level patterns driving region differences.
+
+```{r level4-region-asv-viz, fig.width=14, fig.height=7}
+cat("=== LEVEL 4.3g: ASV-LEVEL VISUALIZATION - REGION DIFFERENCES ===\n\n")
+
+# PRIMERSET 1
+if (!is.null(simper_region_ps1) && !is.null(simper_region_ps1$simper)) {
+  cat("Creating two-panel ASV figure for PRIMERSET 1...\n")
+
+  comp_name_ps1 <- names(simper_region_ps1$simper)[1]
+
+  fig_region_ps1 <- create_asv_twopanel_figure(
+    ps = ps1_pk,
+    simper_result = simper_region_ps1$simper,
+    comparison_name = comp_name_ps1,
+    group_var = "Region",
+    group1 = "North",
+    group2 = "South",
+    main_title = "PRIMERSET 1: Region Differences at ASV Level",
+    top_n = 15
+  )
+
+  print(fig_region_ps1)
+} else {
+  cat("PRIMERSET 1: SIMPER results not available for ASV visualization\n")
+}
+
+# PRIMERSET 2
+if (!is.null(simper_region_ps2) && !is.null(simper_region_ps2$simper)) {
+  cat("\n\nCreating two-panel ASV figure for PRIMERSET 2...\n")
+
+  comp_name_ps2 <- names(simper_region_ps2$simper)[1]
+
+  fig_region_ps2 <- create_asv_twopanel_figure(
+    ps = ps2_pk,
+    simper_result = simper_region_ps2$simper,
+    comparison_name = comp_name_ps2,
+    group_var = "Region",
+    group1 = "North",
+    group2 = "South",
+    main_title = "PRIMERSET 2: Region Differences at ASV Level",
+    top_n = 15
+  )
+
+  print(fig_region_ps2)
+} else {
+  cat("PRIMERSET 2: SIMPER results not available for ASV visualization\n")
+}
+```
+
+---
+
+## 4.6 Prey Selectivity Analysis
+
+Integrate environmental prey availability data to distinguish between:
+1. **Compositional differences**: BP and TP eat different prey
+2. **Selectivity differences**: BP and TP show different preferences for the same available prey
+
+This requires D-frame net data from the field sites. If available, calculate Ivlev's electivity index (E) and test whether selectivity profiles differ between waveforms.
+
+```{r level4-selectivity, fig.width=12, fig.height=10}
+cat("=== LEVEL 4.6: PREY SELECTIVITY ANALYSIS ===\n\n")
+
+# Check if environmental data is available
+env_file <- file.path(root, "input_data", "gabon_inverts_compiled_cleaned_2026_final.csv")
+
+if (file.exists(env_file)) {
+  cat("Environmental prey availability data found.\n")
+  cat("Loading and processing...\n\n")
+
+  # Load environmental data
+  env_raw <- read.csv(env_file, stringsAsFactors = FALSE)
+  colnames(env_raw) <- trimws(colnames(env_raw))
+
+  # Clean and aggregate environmental data
+  env_data <- env_raw %>%
+    mutate(Count = as.numeric(Count)) %>%
+    mutate(Family_clean = sapply(Family, clean_family_name)) %>%
+    filter(!is.na(Family_clean), !is.na(Count), Count > 0) %>%
+    select(Site = Name, Family = Family_clean, Count)
+
+  # Map locality names to site names in environmental data
+  # This mapping depends on your data - adjust as needed
+  locality_to_site <- c(
+    "Bambomo" = "Bambomo Creek",
+    "Apassa" = "Ipassa Creek",
+    "Mengono" = "Mengono Creek",
+    "Iboundji" = "Iboundji Creek"
+  )
+
+  # Get family-level gut contents for P. kingsleyae
+  ps1_pk_family_counts <- extract_family_counts(ps1_pk)
+  ps2_pk_family_counts <- extract_family_counts(ps2_pk)
+
+  # Add metadata
+  meta1_sel <- data.frame(sample_data(ps1_pk))
+  meta1_sel$SampleID <- rownames(meta1_sel)
+
+  meta2_sel <- data.frame(sample_data(ps2_pk))
+  meta2_sel$SampleID <- rownames(meta2_sel)
+
+  ps1_pk_family_counts <- ps1_pk_family_counts %>%
+    left_join(
+      meta1_sel %>%
+        select(SampleID, Locality_Name, Waveform_Type, Region),
+      by = "SampleID"
+    )
+
+  ps2_pk_family_counts <- ps2_pk_family_counts %>%
+    left_join(
+      meta2_sel %>%
+        select(SampleID, Locality_Name, Waveform_Type, Region),
+      by = "SampleID"
+    )
+
+  # Function to calculate selectivity for an individual fish
+  calc_individual_selectivity <- function(sample_id, diet_data, env_data_site, metadata) {
+    # Get diet for this individual fish
+    diet_individual <- diet_data %>%
+      filter(SampleID == sample_id)
+
+    if (nrow(diet_individual) == 0) {
+      return(NULL)
+    }
+
+    # Calculate selectivity
+    selectivity <- calculate_selectivity(
+      diet_counts = diet_individual %>% select(Family, Count),
+      env_counts = env_data_site %>% select(Family, Count)
+    )
+
+    # Add metadata
+    meta_row <- metadata[metadata$SampleID == sample_id, ]
+    selectivity$SampleID <- sample_id
+    selectivity$Locality <- meta_row$Locality_Name
+    selectivity$Waveform <- meta_row$Waveform_Type
+    selectivity$Region <- meta_row$Region
+
+    return(selectivity)
+  }
+
+  # Calculate selectivity for EACH INDIVIDUAL FISH
+  selectivity_results_ps1 <- list()
+  selectivity_results_ps2 <- list()
+
+  # Get unique samples with locality info
+  samples_ps1 <- ps1_pk_family_counts %>%
+    distinct(SampleID, Locality_Name, Waveform_Type, Region)
+
+  for (i in 1:nrow(samples_ps1)) {
+    sample_id <- samples_ps1$SampleID[i]
+    locality <- samples_ps1$Locality_Name[i]
+
+    # Get site name for environmental data
+    site_name <- locality_to_site[locality]
+    if (is.na(site_name)) next
+
+    # Get environmental data for this site
+    env_site <- env_data %>% filter(Site == site_name)
+    if (nrow(env_site) == 0) next
+
+    # Calculate selectivity for this individual
+    selectivity <- calc_individual_selectivity(
+      sample_id = sample_id,
+      diet_data = ps1_pk_family_counts,
+      env_data_site = env_site,
+      metadata = meta1_sel
+    )
+
+    if (!is.null(selectivity)) {
+      selectivity_results_ps1[[sample_id]] <- selectivity
+    }
+  }
+
+  # Combine results
+  if (length(selectivity_results_ps1) > 0) {
+    selectivity_ps1_df <- bind_rows(selectivity_results_ps1)
+
+    cat("PRIMERSET 1 - Selectivity Analysis (Individual-level):\n")
+    cat("  Individuals analyzed:", n_distinct(selectivity_ps1_df$SampleID), "\n")
+    cat("  Total family-individual combinations:", nrow(selectivity_ps1_df), "\n\n")
+
+    # Summary statistics by Waveform
+    cat("Mean Ivlev's E by Waveform:\n")
+    selectivity_summary_ps1 <- selectivity_ps1_df %>%
+      group_by(Waveform, Region) %>%
+      summarise(
+        n_individuals = n_distinct(SampleID),
+        n_families = n_distinct(Family),
+        mean_E = mean(Ivlev_E, na.rm = TRUE),
+        mean_abs_E = mean(abs(Ivlev_E), na.rm = TRUE),
+        n_preference = sum(Selection_Type == "Preference"),
+        n_avoidance = sum(Selection_Type == "Avoidance"),
+        .groups = "drop"
+      )
+
+    print(selectivity_summary_ps1)
+
+    # Test: Do BP and TP differ in selectivity profiles?
+    # Create wide matrix of Ivlev's E values (one row per individual)
+    selectivity_wide_ps1 <- selectivity_ps1_df %>%
+      select(SampleID, Region, Waveform, Locality, Family, Ivlev_E) %>%
+      group_by(SampleID, Region, Waveform, Locality, Family) %>%
+      summarise(Ivlev_E = mean(Ivlev_E, na.rm = TRUE), .groups = "drop") %>%
+      pivot_wider(names_from = Family, values_from = Ivlev_E, values_fill = 0)
+
+    if (nrow(selectivity_wide_ps1) > 3) { # Need at least 4 samples
+      selectivity_matrix_ps1 <- as.matrix(selectivity_wide_ps1[, -(1:4)])
+      rownames(selectivity_matrix_ps1) <- selectivity_wide_ps1$SampleID
+
+      selectivity_meta_ps1 <- selectivity_wide_ps1 %>%
+        select(SampleID, Region, Waveform, Locality)
+
+      # Distance matrix
+      selectivity_dist_ps1 <- vegdist(selectivity_matrix_ps1, method = "euclidean")
+
+      # PERMANOVA: Does waveform predict selectivity?
+      cat("\n\nPERMANOVA: Individual Selectivity ~ Waveform + Region\n")
+      cat("Sample size: ", nrow(selectivity_meta_ps1), " individuals\n")
+
+      if (n_distinct(selectivity_meta_ps1$Waveform) > 1 &&
+        n_distinct(selectivity_meta_ps1$Region) > 0) {
+        # Check degrees of freedom
+        n_samples <- nrow(selectivity_meta_ps1)
+        n_waveforms <- n_distinct(selectivity_meta_ps1$Waveform)
+        n_regions <- n_distinct(selectivity_meta_ps1$Region)
+        model_df <- (n_waveforms - 1) + (n_regions - 1)
+        residual_df <- n_samples - model_df - 1
+
+        cat("Model df:", model_df, ", Residual df:", residual_df, "\n\n")
+
+        if (residual_df > 0) {
+          perm_selectivity_ps1 <- adonis2(
+            selectivity_dist_ps1 ~ Waveform + Region,
+            data = selectivity_meta_ps1,
+            permutations = 999,
+            by = "margin"
+          )
+          print(perm_selectivity_ps1)
+
+          cat("\nInterpretation:\n")
+          if (!is.na(perm_selectivity_ps1$`Pr(>F)`[1]) &&
+            perm_selectivity_ps1$`Pr(>F)`[1] < 0.05) {
+            cat("Waveform DOES predict selectivity (p < 0.05)\n")
+            cat("→ BP and TP show different prey preferences\n")
+          } else {
+            cat("Waveform does NOT predict selectivity (p >= 0.05)\n")
+            cat("→ BP and TP show similar prey preferences\n")
+            cat("   (compositional differences driven by availability, not selection)\n")
+          }
+        } else {
+          cat("No residual component - insufficient samples for this model.\n")
+          cat("Try testing Waveform alone:\n\n")
+
+          perm_selectivity_wf_ps1 <- adonis2(
+            selectivity_dist_ps1 ~ Waveform,
+            data = selectivity_meta_ps1,
+            permutations = 999
+          )
+          print(perm_selectivity_wf_ps1)
+        }
+      } else {
+        cat("Insufficient waveform variation for PERMANOVA.\n")
+      }
+
+      # PCoA visualization
+      pcoa_sel_ps1 <- cmdscale(selectivity_dist_ps1, eig = TRUE, k = 2)
+
+      pcoa_sel_df_ps1 <- data.frame(
+        PCoA1 = pcoa_sel_ps1$points[, 1],
+        PCoA2 = pcoa_sel_ps1$points[, 2],
+        selectivity_meta_ps1
+      )
+
+      p_selectivity_ps1 <- ggplot(
+        pcoa_sel_df_ps1,
+        aes(
+          x = PCoA1, y = PCoA2,
+          color = Waveform, shape = Region
+        )
+      ) +
+        geom_point(size = 4, alpha = 0.7) +
+        theme_minimal() +
+        scale_color_brewer(palette = "Set1") +
+        labs(
+          title = "PS1: Individual Prey Selectivity Profiles (BP vs. TP)",
+          subtitle = "PCoA on Ivlev's E values (each point = one fish)",
+          color = "Waveform",
+          shape = "Region"
+        )
+
+      print(p_selectivity_ps1)
+    } else {
+      cat("Insufficient samples for PERMANOVA (need at least 4 individuals).\n")
+    }
+  } else {
+    cat("Could not calculate selectivity for PS1 (no matching environmental data)\n")
+  }
+
+  # ===== PRIMERSET 2 ANALYSIS =====
+
+  # Get unique samples with locality info for PS2
+  samples_ps2 <- ps2_pk_family_counts %>%
+    distinct(SampleID, Locality_Name, Waveform_Type, Region)
+
+  for (i in 1:nrow(samples_ps2)) {
+    sample_id <- samples_ps2$SampleID[i]
+    locality <- samples_ps2$Locality_Name[i]
+
+    # Get site name for environmental data
+    site_name <- locality_to_site[locality]
+    if (is.na(site_name)) next
+
+    # Get environmental data for this site
+    env_site <- env_data %>% filter(Site == site_name)
+    if (nrow(env_site) == 0) next
+
+    # Calculate selectivity for this individual
+    selectivity <- calc_individual_selectivity(
+      sample_id = sample_id,
+      diet_data = ps2_pk_family_counts,
+      env_data_site = env_site,
+      metadata = meta2_sel
+    )
+
+    if (!is.null(selectivity)) {
+      selectivity_results_ps2[[sample_id]] <- selectivity
+    }
+  }
+
+  # Combine and analyze PS2 results
+  if (length(selectivity_results_ps2) > 0) {
+    selectivity_ps2_df <- bind_rows(selectivity_results_ps2)
+
+    cat("\n\n==============================================\n")
+    cat("PRIMERSET 2 - Selectivity Analysis (Individual-level):\n")
+    cat("  Individuals analyzed:", n_distinct(selectivity_ps2_df$SampleID), "\n")
+    cat(
+      "  Total family-individual combinations:",
+      nrow(selectivity_ps2_df), "\n\n"
+    )
+
+    # Summary statistics by Waveform
+    cat("Mean Ivlev's E by Waveform:\n")
+    selectivity_summary_ps2 <- selectivity_ps2_df %>%
+      group_by(Waveform, Region) %>%
+      summarise(
+        n_individuals = n_distinct(SampleID),
+        n_families = n_distinct(Family),
+        mean_E = mean(Ivlev_E, na.rm = TRUE),
+        mean_abs_E = mean(abs(Ivlev_E), na.rm = TRUE),
+        n_preference = sum(Selection_Type == "Preference"),
+        n_avoidance = sum(Selection_Type == "Avoidance"),
+        .groups = "drop"
+      )
+
+    print(selectivity_summary_ps2)
+
+    # Create wide matrix for PERMANOVA
+    selectivity_wide_ps2 <- selectivity_ps2_df %>%
+      select(SampleID, Region, Waveform, Locality, Family, Ivlev_E) %>%
+      group_by(SampleID, Region, Waveform, Locality, Family) %>%
+      summarise(Ivlev_E = mean(Ivlev_E, na.rm = TRUE), .groups = "drop") %>%
+      pivot_wider(names_from = Family, values_from = Ivlev_E, values_fill = 0)
+
+    if (nrow(selectivity_wide_ps2) > 3) {
+      selectivity_matrix_ps2 <- as.matrix(selectivity_wide_ps2[, -(1:4)])
+      rownames(selectivity_matrix_ps2) <- selectivity_wide_ps2$SampleID
+
+      selectivity_meta_ps2 <- selectivity_wide_ps2 %>%
+        select(SampleID, Region, Waveform, Locality)
+
+      # Distance matrix
+      selectivity_dist_ps2 <- vegdist(selectivity_matrix_ps2, method = "euclidean")
+
+      # PERMANOVA
+      cat("\n\nPERMANOVA: Individual Selectivity ~ Waveform + Region\n")
+      cat("Sample size: ", nrow(selectivity_meta_ps2), " individuals\n")
+
+      if (n_distinct(selectivity_meta_ps2$Waveform) > 1 &&
+        n_distinct(selectivity_meta_ps2$Region) > 0) {
+        n_samples <- nrow(selectivity_meta_ps2)
+        n_waveforms <- n_distinct(selectivity_meta_ps2$Waveform)
+        n_regions <- n_distinct(selectivity_meta_ps2$Region)
+        model_df <- (n_waveforms - 1) + (n_regions - 1)
+        residual_df <- n_samples - model_df - 1
+
+        cat("Model df:", model_df, ", Residual df:", residual_df, "\n\n")
+
+        if (residual_df > 0) {
+          perm_selectivity_ps2 <- adonis2(
+            selectivity_dist_ps2 ~ Waveform + Region,
+            data = selectivity_meta_ps2,
+            permutations = 999,
+            by = "margin"
+          )
+          print(perm_selectivity_ps2)
+
+          cat("\nInterpretation:\n")
+          if (!is.na(perm_selectivity_ps2$`Pr(>F)`[1]) &&
+            perm_selectivity_ps2$`Pr(>F)`[1] < 0.05) {
+            cat("Waveform DOES predict selectivity (p < 0.05)\n")
+            cat("→ BP and TP show different prey preferences\n")
+          } else {
+            cat("Waveform does NOT predict selectivity (p >= 0.05)\n")
+            cat("→ BP and TP show similar prey preferences\n")
+          }
+        } else {
+          cat("No residual component - insufficient samples for this model.\n")
+          cat("Try testing Waveform alone:\n\n")
+
+          perm_selectivity_wf_ps2 <- adonis2(
+            selectivity_dist_ps2 ~ Waveform,
+            data = selectivity_meta_ps2,
+            permutations = 999
+          )
+          print(perm_selectivity_wf_ps2)
+        }
+      } else {
+        cat("Insufficient waveform variation for PERMANOVA.\n")
+      }
+
+      # PCoA visualization
+      pcoa_sel_ps2 <- cmdscale(selectivity_dist_ps2, eig = TRUE, k = 2)
+
+      pcoa_sel_df_ps2 <- data.frame(
+        PCoA1 = pcoa_sel_ps2$points[, 1],
+        PCoA2 = pcoa_sel_ps2$points[, 2],
+        selectivity_meta_ps2
+      )
+
+      p_selectivity_ps2 <- ggplot(
+        pcoa_sel_df_ps2,
+        aes(
+          x = PCoA1, y = PCoA2,
+          color = Waveform, shape = Region
+        )
+      ) +
+        geom_point(size = 4, alpha = 0.7) +
+        theme_minimal() +
+        scale_color_brewer(palette = "Set1") +
+        labs(
+          title = "PS2: Individual Prey Selectivity Profiles (BP vs. TP)",
+          subtitle = "PCoA on Ivlev's E values (each point = one fish)",
+          color = "Waveform",
+          shape = "Region"
+        )
+
+      print(p_selectivity_ps2)
+    } else {
+      cat("Insufficient samples for PERMANOVA (need at least 4 individuals).\n")
+    }
+  } else {
+    cat("Could not calculate selectivity for PS2 (no matching environmental data)\n")
+  }
+} else {
+  cat("Environmental prey availability data not found at:\n")
+  cat(env_file, "\n\n")
+  cat("Skipping prey selectivity analysis.\n")
+  cat("This analysis requires D-frame net collection data.\n")
+}
+```
+
+## 4.7 Mean Selectivity Comparison
+
+Calculate mean absolute selectivity (|E|) per fish to measure overall "choosiness", then compare BP vs. TP.
+
+```{r level4-mean-selectivity, fig.width=10, fig.height=6}
+cat("=== LEVEL 4.7: MEAN SELECTIVITY COMPARISON ===\n\n")
+
+if (exists("selectivity_ps1_df") && nrow(selectivity_ps1_df) > 0) {
+  # Calculate mean absolute selectivity per individual fish
+  mean_selectivity <- selectivity_ps1_df %>%
+    group_by(SampleID, Region, Waveform, Locality) %>%
+    summarise(
+      mean_abs_E = mean(abs(Ivlev_E), na.rm = TRUE),
+      n_families = n(),
+      .groups = "drop"
+    )
+
+  cat("Mean Absolute Selectivity by Individual:\n")
+  cat("(Higher |E| = more selective/choosy)\n\n")
+  print(head(mean_selectivity, 10))
+
+  cat("\n\nSummary by Waveform:\n")
+  print(mean_selectivity %>%
+    group_by(Waveform) %>%
+    summarise(
+      n_fish = n(),
+      mean_selectivity = mean(mean_abs_E),
+      sd_selectivity = sd(mean_abs_E),
+      .groups = "drop"
+    ))
+
+  # Test: Do BP and TP differ in overall selectivity?
+  if (n_distinct(mean_selectivity$Waveform) > 1) {
+    cat("\n\nWilcoxon Test: Mean |E| ~ Waveform\n")
+    wt_mean_sel <- wilcox.test(mean_abs_E ~ Waveform, data = mean_selectivity)
+    print(wt_mean_sel)
+
+    cat("\n\nInterpretation:\n")
+    if (wt_mean_sel$p.value < 0.05) {
+      cat("BP and TP differ significantly in overall selectivity (p < 0.05)\n")
+
+      bp_mean <- mean(mean_selectivity$mean_abs_E[mean_selectivity$Waveform == "BP"])
+      tp_mean <- mean(mean_selectivity$mean_abs_E[mean_selectivity$Waveform == "TP"])
+
+      if (bp_mean > tp_mean) {
+        cat("→ BP fish are MORE selective (choosier) than TP fish\n")
+      } else {
+        cat("→ TP fish are MORE selective (choosier) than BP fish\n")
+      }
+    } else {
+      cat("No significant difference in overall selectivity (p >= 0.05)\n")
+      cat("→ BP and TP are equally selective\n")
+    }
+
+    # Visualization
+    p_mean_sel <- ggplot(
+      mean_selectivity,
+      aes(x = Waveform, y = mean_abs_E, fill = Waveform)
+    ) +
+      geom_boxplot(alpha = 0.7) +
+      geom_jitter(width = 0.1, size = 3, alpha = 0.6) +
+      theme_minimal() +
+      scale_fill_brewer(palette = "Set1") +
+      labs(
+        title = "Mean Absolute Selectivity: BP vs. TP",
+        subtitle = "Higher values = more selective (choosier)",
+        x = "Waveform",
+        y = "Mean |Ivlev's E|"
+      ) +
+      theme(legend.position = "none")
+
+    print(p_mean_sel)
+  }
+} else {
+  cat("PS1: Selectivity data not available.\n")
+}
+
+# ===== PRIMERSET 2 MEAN SELECTIVITY =====
+
+if (exists("selectivity_ps2_df") && nrow(selectivity_ps2_df) > 0) {
+  cat("\n\n==============================================\n")
+  cat("PRIMERSET 2 - Mean Selectivity\n")
+  cat("==============================================\n\n")
+
+  # Calculate mean absolute selectivity per individual fish
+  mean_selectivity_ps2 <- selectivity_ps2_df %>%
+    group_by(SampleID, Region, Waveform, Locality) %>%
+    summarise(
+      mean_abs_E = mean(abs(Ivlev_E), na.rm = TRUE),
+      n_families = n(),
+      .groups = "drop"
+    )
+
+  cat("Mean Absolute Selectivity by Individual:\n")
+  cat("(Higher |E| = more selective/choosy)\n\n")
+  print(head(mean_selectivity_ps2, 10))
+
+  cat("\n\nSummary by Waveform:\n")
+  print(mean_selectivity_ps2 %>%
+    group_by(Waveform) %>%
+    summarise(
+      n_fish = n(),
+      mean_selectivity = mean(mean_abs_E),
+      sd_selectivity = sd(mean_abs_E),
+      .groups = "drop"
+    ))
+
+  # Test: Do BP and TP differ in overall selectivity?
+  if (n_distinct(mean_selectivity_ps2$Waveform) > 1) {
+    cat("\n\nWilcoxon Test: Mean |E| ~ Waveform\n")
+    wt_mean_sel_ps2 <- wilcox.test(mean_abs_E ~ Waveform,
+      data = mean_selectivity_ps2
+    )
+    print(wt_mean_sel_ps2)
+
+    cat("\n\nInterpretation:\n")
+    if (wt_mean_sel_ps2$p.value < 0.05) {
+      cat("BP and TP differ significantly in overall selectivity (p < 0.05)\n")
+
+      bp_mean <- mean(mean_selectivity_ps2$mean_abs_E[
+        mean_selectivity_ps2$Waveform == "BP"
+      ])
+      tp_mean <- mean(mean_selectivity_ps2$mean_abs_E[
+        mean_selectivity_ps2$Waveform == "TP"
+      ])
+
+      if (bp_mean > tp_mean) {
+        cat("→ BP fish are MORE selective (choosier) than TP fish\n")
+      } else {
+        cat("→ TP fish are MORE selective (choosier) than BP fish\n")
+      }
+    } else {
+      cat("No significant difference in overall selectivity (p >= 0.05)\n")
+      cat("→ BP and TP are equally selective\n")
+    }
+
+    # Visualization
+    p_mean_sel_ps2 <- ggplot(
+      mean_selectivity_ps2,
+      aes(
+        x = Waveform, y = mean_abs_E,
+        fill = Waveform
+      )
+    ) +
+      geom_boxplot(alpha = 0.7) +
+      geom_jitter(width = 0.1, size = 3, alpha = 0.6) +
+      theme_minimal() +
+      scale_fill_brewer(palette = "Set1") +
+      labs(
+        title = "PS2: Mean Absolute Selectivity: BP vs. TP",
+        subtitle = "Higher values = more selective (choosier)",
+        x = "Waveform",
+        y = "Mean |Ivlev's E|"
+      ) +
+      theme(legend.position = "none")
+
+    print(p_mean_sel_ps2)
+  }
+} else {
+  cat("PS2: Selectivity data not available.\n")
+}
+```
+
+---
+
+# Summary
+
+This document contains:
+
+- **Section 4.3b**: SIMPER analysis identifying prey families driving BP vs. TP dietary differences
+- **Section 4.3c**: SIMPER analysis identifying prey families driving North vs. South dietary differences
+- **Section 4.3d**: Mechanistic drill-down partitioning waveform differences into turnover vs. abundance
+- **Section 4.3e**: Mechanistic drill-down partitioning region differences into turnover vs. abundance
+- **Section 4.3f**: ASV-level visualization of waveform differences
+- **Section 4.3g**: ASV-level visualization of region differences
+- **Section 4.6**: Prey selectivity analysis using environmental D-frame net data
+- **Section 4.7**: Mean selectivity comparison between BP and TP waveforms
+
+All analyses use the phyloseq objects (`ps1_pk`, `ps2_pk`) and helper functions defined in `core_setup.R` and `gut_analysis_2026_helpers.R`.
+
+---
+
+# 4.8 Comprehensive Publication Figure
+
+**Objective**: Synthesize waveform-based dietary niche partitioning findings into a 4-panel publication figure.
+
+**The Story**: BP and TP fish eat different prey species (turnover, not abundance) → this reflects genuine preference differences → but they're equally selective overall.
+
+**Panels**:
+- **A**: ASV read composition (shared vs BP-only vs TP-only)
+- **B**: Key ASVs driving differences (top 10 per primerset, faceted)
+- **C**: Selectivity profiles (preference patterns via PCoA)
+- **D**: Overall selectivity levels (equal choosiness via mean |E|)
+
+---
+
+```{r publication-figure, fig.width=14, fig.height=10, warning=FALSE}
+cat("=== CREATING PUBLICATION FIGURE ===\n\n")
+
+# ============================================================================
+# PANEL A: Calculate ASV overlap and read proportions
+# ============================================================================
+
+cat("Panel A: Calculating ASV overlap and read proportions...\n")
+
+overlap_ps1 <- calculate_asv_overlap_jaccard(ps1_pk, "Waveform_Type", "BP", "TP")
+overlap_ps2 <- calculate_asv_overlap_jaccard(ps2_pk, "Waveform_Type", "BP", "TP")
+
+props_ps1 <- calculate_asv_category_proportions(ps1_pk, overlap_ps1,
+                                                  "Waveform_Type", "BP", "TP")
+props_ps1$PrimerSet <- "PS1"
+
+props_ps2 <- calculate_asv_category_proportions(ps2_pk, overlap_ps2,
+                                                  "Waveform_Type", "BP", "TP")
+props_ps2$PrimerSet <- "PS2"
+
+props_combined <- rbind(props_ps1, props_ps2)
+props_combined$Group_PS <- paste(props_combined$Group, props_combined$PrimerSet)
+props_combined$Group_PS <- factor(props_combined$Group_PS,
+                                   levels = c("BP PS1", "TP PS1", "BP PS2", "TP PS2"))
+
+# ============================================================================
+# PANEL B: Extract top 10 SIMPER ASVs from each primerset separately
+# ============================================================================
+
+cat("Panel B: Extracting top SIMPER ASVs...\n")
+
+comp_name_ps1 <- names(simper_waveform_ps1$simper)[1]
+comp_name_ps2 <- names(simper_waveform_ps2$simper)[1]
+
+# Get top 10 from each primerset
+top_asvs_ps1 <- extract_top_simper_asvs(
+  simper_result = simper_waveform_ps1$simper,
+  comparison_name = comp_name_ps1,
+  ps = ps1_pk,
+  overlap_result = overlap_ps1,
+  group1 = "BP",
+  group2 = "TP",
+  top_n = 10
+)
+top_asvs_ps1$PrimerSet <- "PS1"
+
+top_asvs_ps2 <- extract_top_simper_asvs(
+  simper_result = simper_waveform_ps2$simper,
+  comparison_name = comp_name_ps2,
+  ps = ps2_pk,
+  overlap_result = overlap_ps2,
+  group1 = "BP",
+  group2 = "TP",
+  top_n = 10
+)
+top_asvs_ps2$PrimerSet <- "PS2"
+
+# Combine but keep separate for faceting
+top_asvs_combined <- rbind(top_asvs_ps1, top_asvs_ps2)
+
+# Factor levels for proper ordering within each facet
+top_asvs_combined <- top_asvs_combined %>%
+  group_by(PrimerSet) %>%
+  mutate(Display_Label = factor(Display_Label,
+                                 levels = rev(Display_Label))) %>%
+  ungroup()
+
+top_asvs_combined$PrimerSet <- factor(top_asvs_combined$PrimerSet,
+                                       levels = c("PS1", "PS2"))
+
+cat("  Top 10 ASVs identified for each primerset\n")
+
+# ============================================================================
+# PANEL C: PCoA variance explained (already exists in pcoa_sel_ps1$eig)
+# ============================================================================
+
+cat("Panel C: Calculating variance explained...\n")
+
+eig <- pcoa_sel_ps1$eig
+var_exp_ps1 <- eig / sum(eig) * 100
+
+cat(sprintf("  PCoA1: %.1f%%, PCoA2: %.1f%%\n", var_exp_ps1[1], var_exp_ps1[2]))
+
+# ============================================================================
+# PANEL D: Combine mean selectivity from both primersets
+# ============================================================================
+
+cat("Panel D: Combining mean selectivity data...\n")
+
+mean_selectivity$PrimerSet <- "PS1"
+mean_selectivity_ps2$PrimerSet <- "PS2"
+mean_sel_combined <- rbind(mean_selectivity, mean_selectivity_ps2)
+mean_sel_combined$Group <- paste(mean_sel_combined$Waveform, mean_sel_combined$PrimerSet)
+mean_sel_combined$Group <- factor(mean_sel_combined$Group,
+                                   levels = c("BP PS1", "TP PS1", "BP PS2", "TP PS2"))
+
+# ============================================================================
+# CREATE PANELS
+# ============================================================================
+
+cat("\nCreating panels...\n")
+
+# Color scheme (consistent across all panels)
+asv_colors <- c("Shared" = "gray60",
+                "BP-only" = "#E07020",   # orange
+                "TP-only" = "#2090C0")   # blue
+wf_colors <- c("BP" = "#E07020", "TP" = "#2090C0")
+
+# Panel A: Stacked bar chart (read proportions)
+panel_a <- ggplot(props_combined, aes(x = Group_PS, y = Proportion, fill = Category)) +
+  geom_bar(stat = "identity", position = "stack") +
+  geom_text(aes(label = sprintf("%.1f%%", Proportion)),
+            position = position_stack(vjust = 0.5),
+            color = "white", fontface = "bold", size = 3.5) +
+  scale_fill_manual(values = asv_colors, name = "ASV Category") +
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 100)) +
+  labs(title = "A. Read Proportion from Shared & Unique ASVs",
+       x = NULL, y = "Proportion of Reads (%)") +
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.title = element_text(size = 13, face = "bold"),
+    axis.title.y = element_text(face = "bold"),
+    panel.grid.major.x = element_blank()
+  )
+
+# Panel B: Horizontal bars faceted by primerset
+panel_b <- ggplot(top_asvs_combined, aes(x = Contribution_Pct, y = Display_Label, fill = Category)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = asv_colors, name = "ASV Category") +
+  scale_x_continuous(expand = c(0, 0)) +
+  facet_wrap(~ PrimerSet, ncol = 1, scales = "free_y") +
+  labs(title = "B. Top 10 ASVs Driving Waveform Differences",
+       subtitle = "Ranked by contribution to dissimilarity within each primerset",
+       x = "Contribution to Dissimilarity (%)",
+       y = "Taxon (Genus + Family)") +
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.text.y = element_text(size = 8),
+    plot.title = element_text(size = 13, face = "bold"),
+    plot.subtitle = element_text(size = 10),
+    axis.title.x = element_text(face = "bold"),
+    axis.title.y = element_text(face = "bold"),
+    strip.text = element_text(face = "bold", size = 11),
+    strip.background = element_rect(fill = "gray90", color = NA),
+    legend.position = "none",
+    panel.grid.major.y = element_blank()
+  )
+
+# Panel C: PCoA scatter
+panel_c <- ggplot(pcoa_sel_df_ps1, aes(x = PCoA1, y = PCoA2,
+                                        color = Waveform, shape = Region)) +
+  geom_point(size = 3.5, alpha = 0.8) +
+  stat_ellipse(aes(group = Waveform), level = 0.95, linetype = 2) +
+  scale_color_manual(values = wf_colors, name = "Waveform") +
+  scale_shape_manual(values = c("North" = 16, "South" = 17), name = "Region") +
+  labs(title = "C. Prey Selectivity Profiles (Ivlev's E)",
+       subtitle = "PS1 only; PS2 shows concordant pattern",
+       x = sprintf("PCoA1 (%.1f%%)", var_exp_ps1[1]),
+       y = sprintf("PCoA2 (%.1f%%)", var_exp_ps1[2])) +
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.title = element_text(size = 13, face = "bold"),
+    plot.subtitle = element_text(size = 10),
+    axis.title.x = element_text(face = "bold"),
+    axis.title.y = element_text(face = "bold"),
+    legend.title = element_text(face = "bold")
+  )
+
+# Panel D: Boxplots with annotations
+# Determine appropriate y-axis range
+y_max <- max(mean_sel_combined$mean_abs_E, na.rm = TRUE)
+y_range <- y_max - 0.75
+
+panel_d <- ggplot(mean_sel_combined, aes(x = Group, y = mean_abs_E, fill = Waveform)) +
+  geom_boxplot(alpha = 0.6, outlier.shape = NA) +
+  geom_jitter(width = 0.15, alpha = 0.5, size = 2) +
+  scale_fill_manual(values = wf_colors, name = "Waveform") +
+  scale_y_continuous(limits = c(0.75, y_max + 0.02), expand = c(0, 0)) +
+  labs(title = "D. Mean Absolute Selectivity by Waveform",
+       x = NULL, y = "Mean |Ivlev's E|") +
+  # Add n.s. brackets (positioned relative to top of range)
+  annotate("segment", x = 0.7, xend = 2.3, y = y_max - 0.01, yend = y_max - 0.01, linewidth = 0.5) +
+  annotate("text", x = 1.5, y = y_max + 0.005, label = "n.s.", size = 3.5) +
+  annotate("segment", x = 2.7, xend = 4.3, y = y_max - 0.01, yend = y_max - 0.01, linewidth = 0.5) +
+  annotate("text", x = 3.5, y = y_max + 0.005, label = "n.s.", size = 3.5) +
+  # Add italic annotation (positioned near bottom)
+  annotate("text", x = 2.5, y = 0.76,
+           label = "Equally selective, different preferences",
+           fontface = "italic", size = 3.5, color = "gray30") +
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.title = element_text(size = 13, face = "bold"),
+    axis.title.y = element_text(face = "bold"),
+    legend.title = element_text(face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+# ============================================================================
+# COMBINE PANELS
+# ============================================================================
+
+cat("Combining panels...\n")
+
+combined_fig <- (panel_a | panel_b) / (panel_c | panel_d) +
+  plot_annotation(
+    title = "Waveform-Based Dietary Niche Partitioning in Paramormyrops kingsleyae",
+    subtitle = "Compositional differences driven by species turnover, not differential selectivity",
+    theme = theme(plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+                  plot.subtitle = element_text(size = 12, hjust = 0.5))
+  ) +
+  plot_layout(guides = "collect") &
+  theme(legend.position = "bottom")
+
+print(combined_fig)
+
+cat("\n=== FIGURE CREATION COMPLETE ===\n")
+```
+
+```{r publication-figure-export, include=FALSE}
+cat("\n=== EXPORTING FIGURE ===\n\n")
+
+output_dir <- file.path(root, "output_data/07_Analysis")
+if (!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE)
+
+pdf_path <- file.path(output_dir, "pk_waveform_comprehensive_figure.pdf")
+png_path <- file.path(output_dir, "pk_waveform_comprehensive_figure.png")
+
+ggsave(pdf_path, combined_fig, width = 14, height = 10, units = "in")
+ggsave(png_path, combined_fig, width = 14, height = 10, units = "in", dpi = 300)
+
+cat("Figure exported successfully:\n")
+cat("  PDF:", pdf_path, "\n")
+cat("  PNG:", png_path, "\n")
+```

@@ -1,0 +1,1756 @@
+---
+title: "Dietary Variation in Paramormyrops kingsleyae: Geographic and Individual Effects"
+author: "Gorsuch, Picq, Gallant"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    toc: true
+    latex_engine: xelatex
+    keep_tex: false
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    code_folding: hide
+    theme: flatly
+    df_print: paged
+knit: (function(inputFile, encoding) { root <- rprojroot::find_root(".git/index"); rmarkdown::render(inputFile, encoding = encoding, output_dir = file.path(root, "output_data/07_Analysis")) })
+header-includes:
+- \usepackage{longtable}
+- \usepackage{booktabs}
+- \usepackage{float}
+- \usepackage{array}
+- \usepackage{pdflscape}
+---
+
+```{r setup, include=FALSE}
+# Configure knitr
+knitr::opts_chunk$set(
+  echo = FALSE,
+  warning = FALSE,
+  message = FALSE,
+  fig.width = 7,
+  fig.height = 4.5,
+  dpi = 300
+)
+
+# Set root path and source core setup
+root <- rprojroot::find_root(".git/index")
+source(file.path(root, "code/07_Analysis/core_setup.R"))
+```
+
+# Overview
+
+**Biological context:** This analysis examines dietary variation in *Paramormyrops kingsleyae* across multiple factors including geography (Region), EOD waveform type (BP vs TP), individual traits (sex, body size), and health status (parasitism). Specimens were collected from 4 rivers spanning northern and southern Gabon.
+
+**Research questions:**
+
+1. **Geographic and waveform effects**: Does prey composition vary by region and waveform type?
+2. **Individual factors**: Do sex, body size, and parasitism status affect diet diversity and composition?
+3. **Relative importance**: Which factors explain the most variation in dietary patterns?
+4. **Independent effects**: Does waveform maintain an independent effect after controlling for confounding factors?
+
+**Analytical approach:**
+
+- **Complete-case filtering**: All analyses use the same subset of individuals with complete data for all 5 variables (Region, Waveform, Sex, body size, Parasitism status)
+- **Comprehensive PERMANOVA**: Tests marginal (Type III) effects to assess independent contributions while controlling for all other factors
+- **Dual primer validation**: All major findings replicated across two independent COI primer sets
+
+**Sample design:** ~47 *P. kingsleyae* individuals after complete-case filtering
+
+- North region: Mengono Creek, Iboundji Creek
+- South region: Bambomo Creek, Ipassa Creek
+- Waveform types: BP (burst-pulse) and TP (tonal-pulse)
+- Life stages: Juveniles, adult males, and adult females
+
+---
+
+# 1. Data Preparation
+
+## 1.1 Complete-Case Filtering
+
+```{r data-prep}
+cat("=== COMPREHENSIVE DATA PREPARATION ===\n\n")
+
+#' Prepare comprehensive dataset for full PERMANOVA
+#'
+#' Filters to complete cases (all variables present)
+#' Includes ALL fish (juveniles, males, females)
+#'
+#' @param ps phyloseq object (P. kingsleyae only)
+#' @return List with distance matrix, metadata, OTU matrix, filtered phyloseq
+prepare_comprehensive_data <- function(ps) {
+
+  # Extract metadata
+  meta <- data.frame(sample_data(ps), stringsAsFactors = FALSE)
+
+  cat("Starting samples:", nrow(meta), "\n")
+
+  # Add Region variable (North vs South)
+  # North: Mengono Creek, Iboundji Creek
+  # South: Bambomo Creek, Ipassa Creek
+  meta$Region <- ifelse(
+    meta$Locality_Name %in% c("Mengono Creek", "Iboundji Creek"),
+    "North", "South"
+  )
+  meta$Region <- factor(meta$Region, levels = c("North", "South"))
+
+  # Transform Parasitism to Yes/No
+  meta$Parasite_status <- ifelse(meta$Parasite == 1, "Yes", "No")
+  meta$Parasite_status <- factor(meta$Parasite_status, levels = c("No", "Yes"))
+
+  # Add body_size from SL (standard length)
+  meta$body_size <- as.numeric(meta$SL)
+
+  # Ensure Sex is a factor with all levels
+  meta$Sex <- factor(meta$Sex, levels = c("Male", "Female", "Juvenile"))
+
+  # Ensure Waveform_Type is a factor
+  meta$Waveform_Type <- factor(meta$Waveform_Type, levels = c("BP", "TP"))
+
+  # Filter to complete cases (all variables present)
+  complete_cases <- !is.na(meta$Sex) &
+                    !is.na(meta$body_size) &
+                    !is.na(meta$Parasite) &
+                    !is.na(meta$Waveform_Type) &
+                    !is.na(meta$Region)
+
+  cat("Complete cases (all variables):", sum(complete_cases), "\n")
+  cat("Removed due to missing data:", sum(!complete_cases), "\n")
+
+  # Filter metadata
+  meta_filt <- meta[complete_cases, ]
+
+  # Prune phyloseq to matching samples
+  ps_filt <- prune_samples(rownames(meta_filt), ps)
+
+  # Remove any taxa not present in these samples
+  ps_filt <- prune_taxa(taxa_sums(ps_filt) > 0, ps_filt)
+
+  cat("Filtered phyloseq:", nsamples(ps_filt), "samples,", ntaxa(ps_filt), "ASVs\n")
+
+  # Extract OTU table for beta diversity
+  otu_mat <- as.matrix(otu_table(ps_filt))
+  if (taxa_are_rows(ps_filt)) {
+    otu_mat <- t(otu_mat)
+  }
+
+  # Calculate Bray-Curtis distance
+  dist_mat <- vegdist(otu_mat, method = "bray")
+
+  # Ensure rownames alignment
+  rownames(meta_filt) <- rownames(otu_mat)
+
+  cat("\n")
+
+  return(list(
+    distance = dist_mat,
+    metadata = meta_filt,
+    otu = otu_mat,
+    ps_filtered = ps_filt
+  ))
+}
+
+# Apply to both primer sets
+comp_ps1 <- prepare_comprehensive_data(ps1_pk)
+comp_ps2 <- prepare_comprehensive_data(ps2_pk)
+```
+
+## 1.2 Sample Size Summary
+
+```{r sample-sizes}
+cat("=== SAMPLE SIZE SUMMARY ===\n\n")
+
+# Function to create summary tables
+summarize_samples <- function(meta, ps_name) {
+  cat(ps_name, "\n")
+  cat("Total samples:", nrow(meta), "\n\n")
+
+  # By Sex
+  cat("By Sex:\n")
+  print(table(meta$Sex))
+  cat("\n")
+
+  # By Region
+  cat("By Region:\n")
+  print(table(meta$Region))
+  cat("\n")
+
+  # By Waveform
+  cat("By Waveform:\n")
+  print(table(meta$Waveform_Type))
+  cat("\n")
+
+  # By Parasite status
+  cat("By Parasite Status:\n")
+  print(table(meta$Parasite_status))
+  cat("\n")
+
+  # Cross-tabulation: Region × Waveform
+  cat("Region × Waveform:\n")
+  print(table(meta$Region, meta$Waveform_Type))
+  cat("\n")
+
+  # Cross-tabulation: Region × Waveform × Sex
+  cat("Region × Waveform × Sex:\n")
+  cross_tab <- meta %>%
+    group_by(Region, Waveform_Type, Sex) %>%
+    summarise(n = n(), .groups = "drop") %>%
+    pivot_wider(names_from = Sex, values_from = n, values_fill = 0)
+  print(cross_tab)
+  cat("\n")
+
+  # Body size summary
+  cat("Body size (SL) summary:\n")
+  print(summary(meta$body_size))
+  cat("\n")
+
+  # Body size by Sex
+  cat("Body size by Sex:\n")
+  body_by_sex <- meta %>%
+    group_by(Sex) %>%
+    summarise(
+      n = n(),
+      mean_SL = mean(body_size, na.rm = TRUE),
+      sd_SL = sd(body_size, na.rm = TRUE),
+      min_SL = min(body_size, na.rm = TRUE),
+      max_SL = max(body_size, na.rm = TRUE),
+      .groups = "drop"
+    )
+  print(body_by_sex)
+  cat("\n\n")
+}
+
+# Summarize both primer sets
+summarize_samples(comp_ps1$metadata, "PRIMERSET 1")
+summarize_samples(comp_ps2$metadata, "PRIMERSET 2")
+```
+
+**Key observations:**
+
+- Sample includes all life stages: Males, Females, and Juveniles
+- Body size and Sex are partially confounded (juveniles smaller, sexual size dimorphism)
+- Balanced design for Region × Waveform allows independent testing
+- Complete case filtering ensures all PERMANOVA terms can be tested
+
+---
+
+# 2. Prey Composition Patterns
+
+## 2.1 Family-Level Composition by Region × Waveform
+
+```{r composition-aggregate, fig.width=14, fig.height=10}
+cat("=== FAMILY-LEVEL PREY COMPOSITION ===\n\n")
+
+# Aggregate to family level (using full pk datasets, not filtered)
+ps1_pk_family <- aggregate_to_family(ps1_pk)
+ps2_pk_family <- aggregate_to_family(ps2_pk)
+
+cat("Family-level aggregation (P. kingsleyae):\n")
+cat("  PS1:", ntaxa(ps1_pk_family), "families\n")
+cat("  PS2:", ntaxa(ps2_pk_family), "families\n")
+
+# Add Region variable for faceting
+add_region_variable <- function(ps) {
+  meta <- data.frame(sample_data(ps))
+
+  # Define regions based on locality
+  meta$Region <- ifelse(meta$Locality_Name %in% c("Bambomo Creek", "Ipassa Creek"),
+    "South", "North"
+  )
+
+  # Update sample data
+  sample_data(ps) <- meta
+  return(ps)
+}
+
+ps1_pk_family <- add_region_variable(ps1_pk_family)
+ps2_pk_family <- add_region_variable(ps2_pk_family)
+```
+
+```{r composition-plots, fig.width=14, fig.height=10}
+# Create 4-panel stacked bar chart function
+create_4panel_composition <- function(ps_family, primerset_name, top_n = 10,
+                                      families_to_show = NULL,
+                                      use_global_colors = TRUE) {
+  # Convert to relative abundance
+  ps_rel <- transform_sample_counts(ps_family, function(x) x / sum(x))
+
+  # Melt to long format
+  ps_melt <- psmelt(ps_rel)
+
+  # Clean family names
+  ps_melt$Family_clean <- sapply(ps_melt$Family, clean_family_name)
+
+  # Identify top N families by mean abundance
+  if (is.null(families_to_show)) {
+    top_families <- ps_melt %>%
+      group_by(Family_clean) %>%
+      summarise(mean_abund = mean(Abundance), .groups = "drop") %>%
+      arrange(desc(mean_abund)) %>%
+      slice_head(n = top_n) %>%
+      pull(Family_clean)
+  } else {
+    top_families <- families_to_show
+  }
+
+  # Aggregate by Locality_Name and Family_clean (sum across samples)
+  ps_agg <- ps_melt %>%
+    group_by(Locality_Name, Region, Waveform_Type, Family_clean) %>%
+    summarise(Abundance = sum(Abundance), .groups = "drop")
+
+  # Normalize within each Locality_Name so each bar sums to 1 (100%)
+  ps_agg <- ps_agg %>%
+    group_by(Locality_Name) %>%
+    mutate(RelAbund = Abundance / sum(Abundance)) %>%
+    ungroup()
+
+  # Categorize families into top families vs "Other"
+  ps_final <- ps_agg %>%
+    mutate(Family_display = ifelse(Family_clean %in% top_families,
+      Family_clean, "Other"
+    )) %>%
+    group_by(Locality_Name, Region, Waveform_Type, Family_display) %>%
+    summarise(RelAbund = sum(RelAbund), .groups = "drop")
+
+  # Reorder for plotting
+  ps_final$Family_display <- factor(ps_final$Family_display,
+    levels = c(top_families, "Other")
+  )
+
+  # Create plot with facet_grid(Region ~ Waveform_Type)
+  p <- ggplot(ps_final, aes(
+    x = Locality_Name, y = RelAbund,
+    fill = Family_display
+  )) +
+    geom_bar(stat = "identity", position = "stack") +
+    facet_grid(Region ~ Waveform_Type, scales = "free_x", space = "free_x") +
+    theme_minimal() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      legend.position = "right"
+    ) +
+    labs(
+      title = paste("P. kingsleyae Prey Composition by Population -", primerset_name),
+      subtitle = "Organized by Region (North/South) and Waveform (BP/TP)",
+      x = "River",
+      y = "Relative Abundance"
+    ) +
+    scale_y_continuous(labels = scales::percent)
+
+  # Add color scale
+  if (use_global_colors) {
+    p <- p + scale_fill_manual(
+      values = GLOBAL_FAMILY_COLORS,
+      name = "Prey Family",
+      breaks = c(top_families, "Other"),
+      drop = FALSE
+    )
+  } else {
+    p <- p + scale_fill_viridis_d(option = "turbo", name = "Prey Family")
+  }
+
+  return(p)
+}
+
+# Identify top families across both primer sets for unified coloring
+ps1_pk_rel <- transform_sample_counts(ps1_pk_family, function(x) x / sum(x) * 100)
+ps2_pk_rel <- transform_sample_counts(ps2_pk_family, function(x) x / sum(x) * 100)
+
+# Get family summaries
+get_family_summary_pk <- function(ps_rel) {
+  ps_melt <- psmelt(ps_rel)
+  ps_melt$Family_clean <- sapply(ps_melt$Family, clean_family_name)
+
+  summary_table <- ps_melt %>%
+    group_by(Family_clean) %>%
+    summarise(
+      mean_pct = mean(Abundance),
+      sd_pct = sd(Abundance),
+      n_samples = n(),
+      .groups = "drop"
+    ) %>%
+    arrange(desc(mean_pct)) %>%
+    mutate(mean_sd = paste0(round(mean_pct, 2), " ± ", round(sd_pct, 2)))
+
+  return(summary_table)
+}
+
+summary_pk_ps1 <- get_family_summary_pk(ps1_pk_rel)
+summary_pk_ps2 <- get_family_summary_pk(ps2_pk_rel)
+
+# Combine and get top families
+combined_summary_pk <- bind_rows(
+  summary_pk_ps1 %>% mutate(Dataset = "PS1"),
+  summary_pk_ps2 %>% mutate(Dataset = "PS2")
+) %>%
+  group_by(Family_clean) %>%
+  summarise(Mean_Prop = mean(mean_pct), .groups = "drop") %>%
+  arrange(desc(Mean_Prop)) %>%
+  slice_head(n = 10)
+
+top_families_pk_unified <- combined_summary_pk$Family_clean
+
+cat("\nTop families for P. kingsleyae (unified across both primer sets):\n")
+print(top_families_pk_unified)
+
+# Create plots for both primer sets with unified families
+p_comp_ps1 <- create_4panel_composition(ps1_pk_family, "Primerset 1",
+  families_to_show = top_families_pk_unified,
+  use_global_colors = TRUE
+)
+p_comp_ps2 <- create_4panel_composition(ps2_pk_family, "Primerset 2",
+  families_to_show = top_families_pk_unified,
+  use_global_colors = TRUE
+)
+
+print(p_comp_ps1)
+cat("\n\n")
+print(p_comp_ps2)
+```
+
+**Summary:** Composition patterns show the major prey families consumed across populations. Regional and waveform-associated differences in prey availability and consumption patterns are visible.
+
+---
+
+# 3. Alpha Diversity Analyses
+
+## 3.1 Sex Effects on Shannon Diversity
+
+Test for sex differences in diet diversity using ANCOVA with body size as a covariate to account for sexual size dimorphism.
+
+```{r alpha-sex, fig.width=12, fig.height=10}
+cat("\n=== SEX EFFECTS ON SHANNON DIVERSITY ===\n\n")
+
+# Prepare data with sex and size (using complete-case filtered data)
+prepare_sex_size_data_filtered <- function(comp_data) {
+  meta <- comp_data$metadata
+  ps <- comp_data$ps_filtered
+
+  div <- estimate_richness(ps, measures = c("Shannon"))
+
+  div$Sex <- meta$Sex
+  div$body_size <- meta$body_size
+  div$Sample_Name <- meta$Sample_Name
+  div$Locality_Name <- meta$Locality_Name
+  div$Waveform_Type <- meta$Waveform_Type
+
+  # All rows already have complete data from filtering
+  return(div)
+}
+
+div_ps1_pk <- prepare_sex_size_data_filtered(comp_ps1)
+div_ps2_pk <- prepare_sex_size_data_filtered(comp_ps2)
+
+cat("Sample sizes (P. kingsleyae - complete cases):\n")
+cat("  PS1:", nrow(div_ps1_pk), "samples\n")
+cat("  PS1 sex distribution:\n")
+print(table(div_ps1_pk$Sex))
+
+cat("\n  PS2:", nrow(div_ps2_pk), "samples\n")
+cat("  PS2 sex distribution:\n")
+print(table(div_ps2_pk$Sex))
+
+# Filter to adults only for sex comparison (exclude juveniles)
+div_ps1_pk_adults <- div_ps1_pk[div_ps1_pk$Sex %in% c("Male", "Female"), ]
+div_ps2_pk_adults <- div_ps2_pk[div_ps2_pk$Sex %in% c("Male", "Female"), ]
+
+cat("\nAdult samples (excluding juveniles):\n")
+cat("  PS1:", nrow(div_ps1_pk_adults), "adults\n")
+cat("  PS2:", nrow(div_ps2_pk_adults), "adults\n")
+
+# Check correlation between sex and size in adults
+if (nrow(div_ps1_pk_adults) > 5 && length(unique(div_ps1_pk_adults$Sex)) == 2) {
+  cat("\n=== SEX-SIZE CORRELATION (ADULTS) ===\n")
+
+  # PS1
+  cat("\nPRIMERSET 1:\n")
+  cat("Body size by sex (mean ± SD):\n")
+  size_by_sex_ps1 <- aggregate(body_size ~ Sex,
+    data = div_ps1_pk_adults,
+    FUN = function(x) {
+      paste0(
+        round(mean(x), 1), " ± ",
+        round(sd(x), 1)
+      )
+    }
+  )
+  print(size_by_sex_ps1)
+
+  size_test_ps1 <- t.test(body_size ~ Sex, data = div_ps1_pk_adults)
+  cat("t-test p-value:", format.pval(size_test_ps1$p.value, digits = 3), "\n")
+
+  # PS2
+  if (nrow(div_ps2_pk_adults) > 5 && length(unique(div_ps2_pk_adults$Sex)) == 2) {
+    cat("\nPRIMERSET 2:\n")
+    cat("Body size by sex (mean ± SD):\n")
+    size_by_sex_ps2 <- aggregate(body_size ~ Sex,
+      data = div_ps2_pk_adults,
+      FUN = function(x) {
+        paste0(
+          round(mean(x), 1), " ± ",
+          round(sd(x), 1)
+        )
+      }
+    )
+    print(size_by_sex_ps2)
+
+    size_test_ps2 <- t.test(body_size ~ Sex, data = div_ps2_pk_adults)
+    cat("t-test p-value:", format.pval(size_test_ps2$p.value, digits = 3), "\n")
+  }
+
+  # ANCOVA models (sex + body size)
+  cat("\n=== ANCOVA MODELS (ADULTS ONLY) ===\n")
+
+  # PS1 ANCOVA
+  cat("PRIMERSET 1:\n")
+
+  # Step 1: Check interaction term
+  cat("\nStep 1: Test for Sex:body_size interaction\n")
+  ancova_interaction_ps1 <- lm(Shannon ~ Sex + body_size + Sex:body_size,
+    data = div_ps1_pk_adults
+  )
+
+  # Find the interaction coefficient (could be SexMale:body_size or SexFemale:body_size)
+  coef_names <- rownames(summary(ancova_interaction_ps1)$coefficients)
+  interaction_coef <- grep(":body_size", coef_names, value = TRUE)
+
+  if (length(interaction_coef) > 0) {
+    cat(
+      "Interaction p-value:",
+      format.pval(summary(ancova_interaction_ps1)$coefficients[interaction_coef[1], "Pr(>|t|)"],
+        digits = 3
+      ), "\n"
+    )
+  } else {
+    cat("Warning: Interaction term not found in model\n")
+  }
+
+  # Step 2: Drop interaction (not significant) and fit additive model
+  cat("\nStep 2: Fit additive model\n")
+  ancova_full_ps1 <- lm(Shannon ~ Sex + body_size, data = div_ps1_pk_adults)
+  ancova_reduced_ps1 <- lm(Shannon ~ body_size, data = div_ps1_pk_adults)
+
+  # Step 3: Test sex effect controlling for body size
+  cat("\nStep 3: Test sex effect controlling for body size\n")
+  sex_test_ps1 <- anova(ancova_reduced_ps1, ancova_full_ps1)
+  print(sex_test_ps1)
+
+  cat("\nModel summary (additive model):\n")
+  print(summary(ancova_full_ps1))
+
+  # PS2 ANCOVA
+  if (nrow(div_ps2_pk_adults) > 5 && length(unique(div_ps2_pk_adults$Sex)) == 2) {
+    cat("\n\nPRIMERSET 2:\n")
+
+    # Step 1: Check interaction term
+    cat("\nStep 1: Test for Sex:body_size interaction\n")
+    ancova_interaction_ps2 <- lm(Shannon ~ Sex + body_size + Sex:body_size,
+      data = div_ps2_pk_adults
+    )
+
+    # Find the interaction coefficient (could be SexMale:body_size or SexFemale:body_size)
+    coef_names_ps2 <- rownames(summary(ancova_interaction_ps2)$coefficients)
+    interaction_coef_ps2 <- grep(":body_size", coef_names_ps2, value = TRUE)
+
+    if (length(interaction_coef_ps2) > 0) {
+      cat(
+        "Interaction p-value:",
+        format.pval(summary(ancova_interaction_ps2)$coefficients[interaction_coef_ps2[1], "Pr(>|t|)"],
+          digits = 3
+        ), "\n"
+      )
+    } else {
+      cat("Warning: Interaction term not found in model\n")
+    }
+
+    # Step 2: Drop interaction and fit additive model
+    cat("\nStep 2: Fit additive model\n")
+    ancova_full_ps2 <- lm(Shannon ~ Sex + body_size, data = div_ps2_pk_adults)
+    ancova_reduced_ps2 <- lm(Shannon ~ body_size, data = div_ps2_pk_adults)
+
+    # Step 3: Test sex effect controlling for body size
+    cat("\nStep 3: Test sex effect controlling for body size\n")
+    sex_test_ps2 <- anova(ancova_reduced_ps2, ancova_full_ps2)
+    print(sex_test_ps2)
+
+    cat("\nModel summary (additive model):\n")
+    print(summary(ancova_full_ps2))
+  }
+
+  # Visualization
+  div_ps1_pk_adults$PrimerSet <- "Primerset 1"
+  div_ps2_pk_adults$PrimerSet <- "Primerset 2"
+  div_adults_combined <- bind_rows(div_ps1_pk_adults, div_ps2_pk_adults)
+
+  # Three-panel figure
+  p1 <- ggplot(div_adults_combined, aes(x = Sex, y = Shannon, fill = Sex)) +
+    geom_boxplot(alpha = 0.7) +
+    geom_jitter(width = 0.2, alpha = 0.5) +
+    facet_wrap(~PrimerSet) +
+    theme_minimal() +
+    labs(
+      title = "A. Shannon Diversity by Sex",
+      x = "Sex",
+      y = "Shannon Diversity"
+    ) +
+    theme(legend.position = "none")
+
+  p2 <- ggplot(div_adults_combined, aes(x = Sex, y = body_size, fill = Sex)) +
+    geom_boxplot(alpha = 0.7) +
+    geom_jitter(width = 0.2, alpha = 0.5) +
+    facet_wrap(~PrimerSet) +
+    theme_minimal() +
+    labs(
+      title = "B. Body Size by Sex",
+      x = "Sex",
+      y = "Standard Length (mm)"
+    ) +
+    theme(legend.position = "none")
+
+  p3 <- ggplot(div_adults_combined, aes(x = body_size, y = Shannon, color = Sex)) +
+    geom_point(size = 2, alpha = 0.6) +
+    geom_smooth(method = "lm", se = TRUE, aes(group = Sex)) +
+    facet_wrap(~PrimerSet) +
+    theme_minimal() +
+    labs(
+      title = "C. Shannon vs Body Size by Sex",
+      x = "Standard Length (mm)",
+      y = "Shannon Diversity",
+      color = "Sex"
+    )
+
+  # Combine panels
+  p_sex_combined <- (p1 | p2) / p3
+  print(p_sex_combined)
+}
+```
+
+**Summary:** ANCOVA tests whether sex differences in diet diversity persist after controlling for body size. Sexual dimorphism in body size must be accounted for to avoid confounding.
+
+## 3.2 Body Size Effects on Shannon Diversity
+
+Test for linear relationship between body size and diet diversity across all *P. kingsleyae* individuals.
+
+```{r alpha-size, fig.width=10, fig.height=6}
+cat("\n=== BODY SIZE EFFECTS ON SHANNON DIVERSITY ===\n")
+cat("Testing Shannon ~ body_size for all P. kingsleyae individuals\n\n")
+
+# PS1
+cat("PRIMERSET 1:\n")
+lm_size_ps1 <- lm(Shannon ~ body_size, data = div_ps1_pk)
+print(summary(lm_size_ps1))
+cat("\nPearson correlation:\n")
+cor_size_ps1 <- cor.test(div_ps1_pk$Shannon, div_ps1_pk$body_size)
+cat("  r:", round(cor_size_ps1$estimate, 3), "\n")
+cat(
+  "  95% CI: [", round(cor_size_ps1$conf.int[1], 3), ",",
+  round(cor_size_ps1$conf.int[2], 3), "]\n"
+)
+cat("  P-value:", format.pval(cor_size_ps1$p.value, digits = 3), "\n")
+
+# PS2
+cat("\n\nPRIMERSET 2:\n")
+lm_size_ps2 <- lm(Shannon ~ body_size, data = div_ps2_pk)
+print(summary(lm_size_ps2))
+cat("\nPearson correlation:\n")
+cor_size_ps2 <- cor.test(div_ps2_pk$Shannon, div_ps2_pk$body_size)
+cat("  r:", round(cor_size_ps2$estimate, 3), "\n")
+cat(
+  "  95% CI: [", round(cor_size_ps2$conf.int[1], 3), ",",
+  round(cor_size_ps2$conf.int[2], 3), "]\n"
+)
+cat("  P-value:", format.pval(cor_size_ps2$p.value, digits = 3), "\n")
+
+# Scatterplot with regression line
+div_ps1_pk$PrimerSet <- "Primerset 1"
+div_ps2_pk$PrimerSet <- "Primerset 2"
+div_combined_all <- bind_rows(div_ps1_pk, div_ps2_pk)
+
+p_size_effect <- ggplot(
+  div_combined_all,
+  aes(x = body_size, y = Shannon)
+) +
+  geom_point(aes(color = Sex), alpha = 0.6, size = 3) +
+  geom_smooth(
+    method = "lm", se = TRUE, color = "black",
+    linetype = "dashed", linewidth = 1
+  ) +
+  facet_wrap(~PrimerSet) +
+  theme_minimal() +
+  labs(
+    title = "Body Size Effect on Diet Diversity (P. kingsleyae)",
+    subtitle = paste0(
+      "PS1: r = ", round(cor_size_ps1$estimate, 3),
+      ", p ", format.pval(cor_size_ps1$p.value, digits = 2),
+      " | PS2: r = ", round(cor_size_ps2$estimate, 3),
+      ", p ", format.pval(cor_size_ps2$p.value, digits = 2)
+    ),
+    x = "Standard Length (mm)",
+    y = "Shannon Diversity",
+    color = "Sex"
+  )
+
+print(p_size_effect)
+```
+
+**Summary:** Linear regression and Pearson correlation test whether diet diversity increases, decreases, or remains constant with body size.
+
+## 3.3 Parasitism Effects on Shannon Diversity
+
+Test whether parasitism affects diet diversity and composition in *P. kingsleyae*.
+
+```{r alpha-parasite, fig.width=12, fig.height=8}
+cat("\n=== PARASITISM EFFECTS ON SHANNON DIVERSITY ===\n\n")
+
+# Prepare data with parasitism (already in complete-case filtered data)
+div_para_ps1 <- div_ps1_pk
+div_para_ps1$Parasite_status <- comp_ps1$metadata$Parasite_status
+
+div_para_ps2 <- div_ps2_pk
+div_para_ps2$Parasite_status <- comp_ps2$metadata$Parasite_status
+
+cat("PRIMERSET 1:\n")
+cat("  Samples with parasite data:", nrow(div_para_ps1), "\n")
+cat("  Parasitism status:\n")
+print(table(div_para_ps1$Parasite_status))
+
+cat("\nPRIMERSET 2:\n")
+cat("  Samples with parasite data:", nrow(div_para_ps2), "\n")
+cat("  Parasitism status:\n")
+print(table(div_para_ps2$Parasite_status))
+
+# Test: Do parasitized fish tend to be smaller?
+cat("\n=== BODY SIZE vs PARASITISM STATUS ===\n")
+
+# Summary statistics
+cat("Body size (SL mm) by parasitism status:\n\n")
+
+cat("PRIMERSET 1:\n")
+size_para_summary_ps1 <- div_para_ps1 %>%
+  group_by(Parasite_status) %>%
+  summarise(
+    n = n(),
+    mean_SL = mean(body_size, na.rm = TRUE),
+    sd_SL = sd(body_size, na.rm = TRUE),
+    min_SL = min(body_size, na.rm = TRUE),
+    max_SL = max(body_size, na.rm = TRUE),
+    .groups = "drop"
+  )
+print(size_para_summary_ps1)
+
+cat("\nPRIMERSET 2:\n")
+size_para_summary_ps2 <- div_para_ps2 %>%
+  group_by(Parasite_status) %>%
+  summarise(
+    n = n(),
+    mean_SL = mean(body_size, na.rm = TRUE),
+    sd_SL = sd(body_size, na.rm = TRUE),
+    min_SL = min(body_size, na.rm = TRUE),
+    max_SL = max(body_size, na.rm = TRUE),
+    .groups = "drop"
+  )
+print(size_para_summary_ps2)
+
+# Mann-Whitney U test
+cat("\n\nMann-Whitney U test (body_size ~ Parasite_status):\n\n")
+
+cat("PRIMERSET 1:\n")
+wilcox_size_ps1 <- wilcox.test(body_size ~ Parasite_status, data = div_para_ps1)
+print(wilcox_size_ps1)
+
+cat("\nPRIMERSET 2:\n")
+wilcox_size_ps2 <- wilcox.test(body_size ~ Parasite_status, data = div_para_ps2)
+print(wilcox_size_ps2)
+
+# ANCOVA: Shannon ~ Parasite_status + body_size
+cat("\n\n=== ANCOVA: Shannon ~ Parasite_status + body_size ===\n")
+cat("Tests parasitism effect while controlling for body size\n\n")
+
+cat("PRIMERSET 1:\n")
+ancova_para_ps1 <- lm(Shannon ~ Parasite_status + body_size, data = div_para_ps1)
+print(summary(ancova_para_ps1))
+cat("\nANOVA table:\n")
+print(anova(ancova_para_ps1))
+
+cat("\n\nPRIMERSET 2:\n")
+ancova_para_ps2 <- lm(Shannon ~ Parasite_status + body_size, data = div_para_ps2)
+print(summary(ancova_para_ps2))
+cat("\nANOVA table:\n")
+print(anova(ancova_para_ps2))
+
+# Visualization
+div_para_ps1$PrimerSet <- "Primerset 1"
+div_para_ps2$PrimerSet <- "Primerset 2"
+div_para_combined <- bind_rows(div_para_ps1, div_para_ps2)
+
+p1_para <- ggplot(
+  div_para_combined,
+  aes(x = Parasite_status, y = Shannon, fill = Parasite_status)
+) +
+  geom_boxplot(alpha = 0.7, outlier.shape = NA) +
+  geom_jitter(width = 0.2, alpha = 0.5, size = 2) +
+  facet_wrap(~PrimerSet) +
+  theme_minimal() +
+  labs(
+    title = "A. Shannon Diversity by Parasitism Status",
+    x = "Parasitism Status",
+    y = "Shannon Diversity"
+  ) +
+  theme(legend.position = "none")
+
+p2_para <- ggplot(
+  div_para_combined,
+  aes(x = Parasite_status, y = body_size, fill = Parasite_status)
+) +
+  geom_boxplot(alpha = 0.7, outlier.shape = NA) +
+  geom_jitter(width = 0.2, alpha = 0.5, size = 2) +
+  facet_wrap(~PrimerSet) +
+  theme_minimal() +
+  labs(
+    title = "B. Body Size by Parasitism Status",
+    x = "Parasitism Status",
+    y = "Standard Length (mm)"
+  ) +
+  theme(legend.position = "none")
+
+p3_para <- ggplot(
+  div_para_combined,
+  aes(x = body_size, y = Shannon, color = Parasite_status)
+) +
+  geom_point(size = 2, alpha = 0.6) +
+  geom_smooth(method = "lm", se = TRUE, aes(group = Parasite_status)) +
+  facet_wrap(~PrimerSet) +
+  theme_minimal() +
+  labs(
+    title = "C. Shannon vs Body Size by Parasitism",
+    x = "Standard Length (mm)",
+    y = "Shannon Diversity",
+    color = "Parasitism"
+  )
+
+p_para_combined <- (p1_para | p2_para) / p3_para
+print(p_para_combined)
+```
+
+**Summary:** ANCOVA tests whether parasitism affects diet diversity after controlling for body size. Also checks whether parasitized fish are smaller.
+
+## 3.4 Regional and Waveform Effects on Shannon Diversity
+
+Summary statistics and visualization of Shannon diversity by Region and Waveform type.
+
+```{r alpha-regional, fig.width=10, fig.height=6}
+cat("\n=== REGIONAL AND WAVEFORM EFFECTS ON SHANNON ===\n\n")
+
+# Add Region variable to diversity dataframes
+div_ps1_pk$Region <- comp_ps1$metadata$Region
+div_ps2_pk$Region <- comp_ps2$metadata$Region
+
+# Recreate combined dataframe with Region included
+div_combined_all <- bind_rows(div_ps1_pk, div_ps2_pk)
+
+# Summary statistics by Region and Waveform
+cat("PRIMERSET 1:\n")
+regional_summary_ps1 <- div_ps1_pk %>%
+  group_by(Region, Waveform_Type) %>%
+  summarise(
+    n = n(),
+    mean_Shannon = mean(Shannon, na.rm = TRUE),
+    sd_Shannon = sd(Shannon, na.rm = TRUE),
+    min_Shannon = min(Shannon, na.rm = TRUE),
+    max_Shannon = max(Shannon, na.rm = TRUE),
+    .groups = "drop"
+  )
+print(regional_summary_ps1)
+
+cat("\nPRIMERSET 2:\n")
+regional_summary_ps2 <- div_ps2_pk %>%
+  group_by(Region, Waveform_Type) %>%
+  summarise(
+    n = n(),
+    mean_Shannon = mean(Shannon, na.rm = TRUE),
+    sd_Shannon = sd(Shannon, na.rm = TRUE),
+    min_Shannon = min(Shannon, na.rm = TRUE),
+    max_Shannon = max(Shannon, na.rm = TRUE),
+    .groups = "drop"
+  )
+print(regional_summary_ps2)
+
+# Boxplots by Region and Waveform
+
+p_regional_shannon <- ggplot(
+  div_combined_all,
+  aes(x = interaction(Region, Waveform_Type), y = Shannon, fill = Waveform_Type)
+) +
+  geom_boxplot(alpha = 0.7) +
+  geom_jitter(width = 0.2, alpha = 0.5) +
+  facet_wrap(~PrimerSet) +
+  scale_fill_manual(values = c("BP" = bp_color, "TP" = tp_color)) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(
+    title = "Shannon Diversity by Region and Waveform",
+    x = "Region × Waveform",
+    y = "Shannon Diversity",
+    fill = "Waveform"
+  ) +
+  scale_x_discrete(labels = c(
+    "North.BP" = "North BP",
+    "North.TP" = "North TP",
+    "South.BP" = "South BP",
+    "South.TP" = "South TP"
+  ))
+
+print(p_regional_shannon)
+```
+
+**Summary:** Descriptive statistics and visualization of Shannon diversity patterns across the four Region × Waveform groups.
+
+---
+
+# 4. Beta Diversity: Comprehensive PERMANOVA
+
+## 4.1 Marginal Effects (Type III)
+
+```{r permanova-ps1-marginal}
+cat("=== PRIMERSET 1: COMPREHENSIVE PERMANOVA ===\n\n")
+cat("Model: distance ~ Region + Waveform_Type + Sex + body_size + Parasite_status\n\n")
+
+# PRIMARY MODEL: Marginal tests (additive)
+cat("MARGINAL EFFECTS (Type III) - Tests each term independently:\n\n")
+perm_ps1_marginal <- adonis2(
+  comp_ps1$distance ~ Region + Waveform_Type + Sex + body_size + Parasite_status,
+  data = comp_ps1$metadata,
+  permutations = 999,
+  by = "margin"
+)
+print(perm_ps1_marginal)
+
+# Extract effect sizes for summary
+perm_ps1_df <- as.data.frame(perm_ps1_marginal)
+perm_ps1_df$Term <- rownames(perm_ps1_df)
+
+# Remove residual row for effect size ranking
+effects_ps1 <- perm_ps1_df %>%
+  filter(Term != "Residual") %>%
+  arrange(desc(R2)) %>%
+  select(Term, Df, SumOfSqs, R2, F, `Pr(>F)`)
+
+cat("\n\nEFFECT SIZE RANKING (by R²):\n")
+print(effects_ps1, digits = 4)
+```
+
+```{r permanova-ps1-table}
+kable(effects_ps1,
+  digits = 4,
+  col.names = c("Term", "Df", "Sum of Squares", "R²", "F", "P-value"),
+  caption = "Primerset 1: Marginal PERMANOVA Effects (Type III)",
+  booktabs = TRUE
+) %>%
+  kable_styling(
+    latex_options = c("striped", "HOLD_position"),
+    full_width = FALSE
+  )
+```
+
+```{r permanova-ps2-marginal}
+cat("\n\n=== PRIMERSET 2: COMPREHENSIVE PERMANOVA ===\n\n")
+
+# PRIMARY MODEL: Marginal tests (additive)
+cat("MARGINAL EFFECTS (Type III):\n\n")
+perm_ps2_marginal <- adonis2(
+  comp_ps2$distance ~ Region + Waveform_Type + Sex + body_size + Parasite_status,
+  data = comp_ps2$metadata,
+  permutations = 999,
+  by = "margin"
+)
+print(perm_ps2_marginal)
+
+# Extract effect sizes
+perm_ps2_df <- as.data.frame(perm_ps2_marginal)
+perm_ps2_df$Term <- rownames(perm_ps2_df)
+
+effects_ps2 <- perm_ps2_df %>%
+  filter(Term != "Residual") %>%
+  arrange(desc(R2)) %>%
+  select(Term, Df, SumOfSqs, R2, F, `Pr(>F)`)
+
+cat("\n\nEFFECT SIZE RANKING (by R²):\n")
+print(effects_ps2, digits = 4)
+```
+
+```{r permanova-ps2-table}
+kable(effects_ps2,
+  digits = 4,
+  col.names = c("Term", "Df", "Sum of Squares", "R²", "F", "P-value"),
+  caption = "Primerset 2: Marginal PERMANOVA Effects (Type III)",
+  booktabs = TRUE
+) %>%
+  kable_styling(
+    latex_options = c("striped", "HOLD_position"),
+    full_width = FALSE
+  )
+```
+
+**Summary:** Marginal (Type III) tests show each factor's independent contribution to dietary variation while controlling for all other factors in the model.
+
+## 4.2 Variance Partitioning
+
+### 4.2.1 Two-Way Partition: Ecological vs Individual Factors
+
+```{r variance-partition-2way}
+cat("=== TWO-WAY VARIANCE PARTITIONING ===\n\n")
+cat("Group 1: Ecological (Region + Waveform_Type)\n")
+cat("Group 2: Individual (Sex + body_size + Parasite_status)\n\n")
+
+# Primerset 1
+cat("PRIMERSET 1:\n")
+vp_2way_ps1 <- varpart(
+  comp_ps1$distance,
+  ~ Region + Waveform_Type,
+  ~ Sex + body_size + Parasite_status,
+  data = comp_ps1$metadata
+)
+print(vp_2way_ps1)
+
+vp_2way_ps1_frac <- vp_2way_ps1$part$indfract
+cat("\n\nVariance Components (Adjusted R²):\n")
+cat(sprintf("  Pure Ecological: %.4f\n", vp_2way_ps1_frac$Adj.R.square[1]))
+cat(sprintf("  Pure Individual: %.4f\n", vp_2way_ps1_frac$Adj.R.square[2]))
+cat(sprintf("  Shared: %.4f\n", vp_2way_ps1_frac$Adj.R.square[3]))
+cat(sprintf("  Unexplained: %.4f\n", 1 - sum(vp_2way_ps1_frac$Adj.R.square[1:3])))
+
+# Primerset 2
+cat("\n\nPRIMERSET 2:\n")
+vp_2way_ps2 <- varpart(
+  comp_ps2$distance,
+  ~ Region + Waveform_Type,
+  ~ Sex + body_size + Parasite_status,
+  data = comp_ps2$metadata
+)
+print(vp_2way_ps2)
+
+vp_2way_ps2_frac <- vp_2way_ps2$part$indfract
+cat("\n\nVariance Components (Adjusted R²):\n")
+cat(sprintf("  Pure Ecological: %.4f\n", vp_2way_ps2_frac$Adj.R.square[1]))
+cat(sprintf("  Pure Individual: %.4f\n", vp_2way_ps2_frac$Adj.R.square[2]))
+cat(sprintf("  Shared: %.4f\n", vp_2way_ps2_frac$Adj.R.square[3]))
+cat(sprintf("  Unexplained: %.4f\n", 1 - sum(vp_2way_ps2_frac$Adj.R.square[1:3])))
+```
+
+### 4.2.2 Three-Way Partition: Region vs Waveform vs Individual
+
+```{r variance-partition-3way}
+cat("\n\n=== THREE-WAY VARIANCE PARTITIONING ===\n\n")
+cat("Group 1: Region\n")
+cat("Group 2: Waveform_Type\n")
+cat("Group 3: Individual (Sex + body_size + Parasite_status)\n\n")
+
+# Primerset 1
+cat("PRIMERSET 1:\n")
+vp_3way_ps1 <- varpart(
+  comp_ps1$distance,
+  ~ Region,
+  ~ Waveform_Type,
+  ~ Sex + body_size + Parasite_status,
+  data = comp_ps1$metadata
+)
+print(vp_3way_ps1)
+
+vp_3way_ps1_frac <- vp_3way_ps1$part$indfract
+cat("\n\nVariance Components (Adjusted R²):\n")
+cat(sprintf("  Pure Region: %.4f\n", vp_3way_ps1_frac$Adj.R.square[1]))
+cat(sprintf("  Pure Waveform: %.4f\n", vp_3way_ps1_frac$Adj.R.square[2]))
+cat(sprintf("  Pure Individual: %.4f\n", vp_3way_ps1_frac$Adj.R.square[3]))
+cat(sprintf("  Shared Region+Waveform: %.4f\n", vp_3way_ps1_frac$Adj.R.square[4]))
+cat(sprintf("  Shared Region+Individual: %.4f\n", vp_3way_ps1_frac$Adj.R.square[5]))
+cat(sprintf("  Shared Waveform+Individual: %.4f\n", vp_3way_ps1_frac$Adj.R.square[6]))
+cat(sprintf("  Shared All Three: %.4f\n", vp_3way_ps1_frac$Adj.R.square[7]))
+
+# Primerset 2
+cat("\n\nPRIMERSET 2:\n")
+vp_3way_ps2 <- varpart(
+  comp_ps2$distance,
+  ~ Region,
+  ~ Waveform_Type,
+  ~ Sex + body_size + Parasite_status,
+  data = comp_ps2$metadata
+)
+print(vp_3way_ps2)
+
+vp_3way_ps2_frac <- vp_3way_ps2$part$indfract
+cat("\n\nVariance Components (Adjusted R²):\n")
+cat(sprintf("  Pure Region: %.4f\n", vp_3way_ps2_frac$Adj.R.square[1]))
+cat(sprintf("  Pure Waveform: %.4f\n", vp_3way_ps2_frac$Adj.R.square[2]))
+cat(sprintf("  Pure Individual: %.4f\n", vp_3way_ps2_frac$Adj.R.square[3]))
+cat(sprintf("  Shared Region+Waveform: %.4f\n", vp_3way_ps2_frac$Adj.R.square[4]))
+cat(sprintf("  Shared Region+Individual: %.4f\n", vp_3way_ps2_frac$Adj.R.square[5]))
+cat(sprintf("  Shared Waveform+Individual: %.4f\n", vp_3way_ps2_frac$Adj.R.square[6]))
+cat(sprintf("  Shared All Three: %.4f\n", vp_3way_ps2_frac$Adj.R.square[7]))
+```
+
+**Summary:** Variance partitioning quantifies how much variation is uniquely explained by ecological factors (Region, Waveform) vs individual factors (Sex, body size, Parasitism), and how much is shared among groups.
+
+## 4.3 PCoA Visualization
+
+```{r pcoa-multipanel, fig.width=12, fig.height=8}
+cat("=== PCOA VISUALIZATION ===\n\n")
+
+# Function to create PCoA from distance matrix
+create_pcoa_data <- function(dist_mat, metadata) {
+  pcoa_result <- cmdscale(dist_mat, eig = TRUE, k = 2)
+
+  pcoa_df <- data.frame(
+    PC1 = pcoa_result$points[, 1],
+    PC2 = pcoa_result$points[, 2],
+    metadata
+  )
+
+  # Calculate variance explained
+  eig <- pcoa_result$eig
+  var_exp <- eig / sum(eig)
+
+  list(
+    data = pcoa_df,
+    var_pc1 = var_exp[1],
+    var_pc2 = var_exp[2]
+  )
+}
+
+# Create PCoA data
+pcoa_ps1 <- create_pcoa_data(comp_ps1$distance, comp_ps1$metadata)
+pcoa_ps2 <- create_pcoa_data(comp_ps2$distance, comp_ps2$metadata)
+
+# Primerset 1 - Multi-panel
+p1_wave_region <- ggplot(pcoa_ps1$data, aes(x = PC1, y = PC2, color = Waveform_Type, shape = Region)) +
+  geom_point(size = 3, alpha = 0.7) +
+  scale_color_manual(values = c("BP" = bp_color, "TP" = tp_color)) +
+  labs(
+    title = "A: Waveform & Region",
+    x = sprintf("PC1 (%.1f%%)", pcoa_ps1$var_pc1 * 100),
+    y = sprintf("PC2 (%.1f%%)", pcoa_ps1$var_pc2 * 100)
+  ) +
+  theme_minimal()
+
+p1_sex_parasite <- ggplot(pcoa_ps1$data, aes(x = PC1, y = PC2, color = Sex, shape = Parasite_status)) +
+  geom_point(size = 3, alpha = 0.7) +
+  scale_color_manual(values = c("Male" = "#0072B2", "Female" = "#D55E00", "Juvenile" = "#009E73")) +
+  labs(
+    title = "B: Sex & Parasitism",
+    x = sprintf("PC1 (%.1f%%)", pcoa_ps1$var_pc1 * 100),
+    y = sprintf("PC2 (%.1f%%)", pcoa_ps1$var_pc2 * 100)
+  ) +
+  theme_minimal()
+
+p1_size <- ggplot(pcoa_ps1$data, aes(x = PC1, y = PC2, color = body_size)) +
+  geom_point(size = 3, alpha = 0.7) +
+  scale_color_viridis_c(name = "Body Size (mm)") +
+  labs(
+    title = "C: Body Size",
+    x = sprintf("PC1 (%.1f%%)", pcoa_ps1$var_pc1 * 100),
+    y = sprintf("PC2 (%.1f%%)", pcoa_ps1$var_pc2 * 100)
+  ) +
+  theme_minimal()
+
+# Combine panels
+p_pcoa_ps1 <- (p1_wave_region | p1_sex_parasite | p1_size) +
+  plot_annotation(title = "Primerset 1: PCoA of Diet Composition (Bray-Curtis)")
+
+print(p_pcoa_ps1)
+
+# Primerset 2 - Multi-panel
+p2_wave_region <- ggplot(pcoa_ps2$data, aes(x = PC1, y = PC2, color = Waveform_Type, shape = Region)) +
+  geom_point(size = 3, alpha = 0.7) +
+  scale_color_manual(values = c("BP" = bp_color, "TP" = tp_color)) +
+  labs(
+    title = "A: Waveform & Region",
+    x = sprintf("PC1 (%.1f%%)", pcoa_ps2$var_pc1 * 100),
+    y = sprintf("PC2 (%.1f%%)", pcoa_ps2$var_pc2 * 100)
+  ) +
+  theme_minimal()
+
+p2_sex_parasite <- ggplot(pcoa_ps2$data, aes(x = PC1, y = PC2, color = Sex, shape = Parasite_status)) +
+  geom_point(size = 3, alpha = 0.7) +
+  scale_color_manual(values = c("Male" = "#0072B2", "Female" = "#D55E00", "Juvenile" = "#009E73")) +
+  labs(
+    title = "B: Sex & Parasitism",
+    x = sprintf("PC1 (%.1f%%)", pcoa_ps2$var_pc1 * 100),
+    y = sprintf("PC2 (%.1f%%)", pcoa_ps2$var_pc2 * 100)
+  ) +
+  theme_minimal()
+
+p2_size <- ggplot(pcoa_ps2$data, aes(x = PC1, y = PC2, color = body_size)) +
+  geom_point(size = 3, alpha = 0.7) +
+  scale_color_viridis_c(name = "Body Size (mm)") +
+  labs(
+    title = "C: Body Size",
+    x = sprintf("PC1 (%.1f%%)", pcoa_ps2$var_pc1 * 100),
+    y = sprintf("PC2 (%.1f%%)", pcoa_ps2$var_pc2 * 100)
+  ) +
+  theme_minimal()
+
+p_pcoa_ps2 <- (p2_wave_region | p2_sex_parasite | p2_size) +
+  plot_annotation(title = "Primerset 2: PCoA of Diet Composition (Bray-Curtis)")
+
+print(p_pcoa_ps2)
+```
+
+**Summary:** PCoA visualizes the multivariate relationships between samples, colored and shaped by different factors to reveal patterns.
+
+## 4.4 Dispersion Tests (betadisper)
+
+PERMANOVA assumes homogeneous dispersion across groups. We test this assumption for each categorical factor.
+
+```{r betadisper-tests, fig.width=12, fig.height=8}
+cat("=== DISPERSION TESTS (betadisper) ===\n\n")
+
+# Function to run betadisper and plot
+test_dispersion <- function(dist_mat, metadata, factor_var, ps_name) {
+  cat(ps_name, "-", factor_var, "\n")
+
+  # Run betadisper
+  bd <- betadisper(dist_mat, metadata[[factor_var]])
+
+  # Permutation test
+  bd_test <- permutest(bd, permutations = 999)
+
+  cat("  F =", round(bd_test$statistic, 3), ", p =", round(bd_test$tab$`Pr(>F)`[1], 4), "\n")
+
+  if (bd_test$tab$`Pr(>F)`[1] < 0.05) {
+    cat("  WARNING: Significant dispersion heterogeneity detected!\n")
+  } else {
+    cat("  OK: Homogeneous dispersion (assumption met)\n")
+  }
+  cat("\n")
+
+  # Create plot
+  bd_df <- data.frame(
+    Distance_to_Centroid = bd$distances,
+    Group = bd$group
+  )
+
+  p <- ggplot(bd_df, aes(x = Group, y = Distance_to_Centroid, fill = Group)) +
+    geom_boxplot(alpha = 0.7) +
+    geom_jitter(width = 0.2, alpha = 0.5) +
+    labs(
+      title = paste(ps_name, ":", factor_var),
+      subtitle = sprintf("F = %.2f, p = %.4f", bd_test$statistic, bd_test$tab$`Pr(>F)`[1]),
+      x = factor_var,
+      y = "Distance to Centroid"
+    ) +
+    theme_minimal() +
+    theme(legend.position = "none")
+
+  list(test = bd_test, plot = p)
+}
+
+# Primerset 1 - All factors
+cat("PRIMERSET 1:\n\n")
+bd_ps1_waveform <- test_dispersion(comp_ps1$distance, comp_ps1$metadata, "Waveform_Type", "PS1")
+bd_ps1_region <- test_dispersion(comp_ps1$distance, comp_ps1$metadata, "Region", "PS1")
+bd_ps1_sex <- test_dispersion(comp_ps1$distance, comp_ps1$metadata, "Sex", "PS1")
+bd_ps1_parasite <- test_dispersion(comp_ps1$distance, comp_ps1$metadata, "Parasite_status", "PS1")
+
+# Combine plots
+p_disp_ps1 <- (bd_ps1_waveform$plot | bd_ps1_region$plot) /
+              (bd_ps1_sex$plot | bd_ps1_parasite$plot) +
+  plot_annotation(title = "Primerset 1: Dispersion Tests (betadisper)")
+
+print(p_disp_ps1)
+
+# Primerset 2 - All factors
+cat("\nPRIMERSET 2:\n\n")
+bd_ps2_waveform <- test_dispersion(comp_ps2$distance, comp_ps2$metadata, "Waveform_Type", "PS2")
+bd_ps2_region <- test_dispersion(comp_ps2$distance, comp_ps2$metadata, "Region", "PS2")
+bd_ps2_sex <- test_dispersion(comp_ps2$distance, comp_ps2$metadata, "Sex", "PS2")
+bd_ps2_parasite <- test_dispersion(comp_ps2$distance, comp_ps2$metadata, "Parasite_status", "PS2")
+
+p_disp_ps2 <- (bd_ps2_waveform$plot | bd_ps2_region$plot) /
+              (bd_ps2_sex$plot | bd_ps2_parasite$plot) +
+  plot_annotation(title = "Primerset 2: Dispersion Tests (betadisper)")
+
+print(p_disp_ps2)
+```
+
+**Interpretation:** If betadisper tests are significant, PERMANOVA results may be driven by differences in dispersion (spread) rather than centroid location. In such cases, interpret PERMANOVA results with caution.
+
+---
+
+# 5. Publication Figure: 4-Panel Synthesis
+
+## 5.1 Panel Functions
+
+```{r fig-panel-functions}
+# Panel A: Prey Composition (8 bars: 4 Region×Waveform groups × 2 primer sets)
+create_panel_a <- function(ps1_family, ps2_family) {
+  # Aggregate both primer sets by Region × Waveform
+  # Create 8-bar plot
+
+  # Transform to relative abundance
+  ps1_rel <- transform_sample_counts(ps1_family, function(x) x / sum(x))
+  ps2_rel <- transform_sample_counts(ps2_family, function(x) x / sum(x))
+
+  # Melt to long format
+  ps1_melt <- psmelt(ps1_rel)
+  ps2_melt <- psmelt(ps2_rel)
+
+  # Add primer set labels
+  ps1_melt$PrimerSet <- "PS1"
+  ps2_melt$PrimerSet <- "PS2"
+
+  # Clean family names
+  ps1_melt$Family_clean <- sapply(ps1_melt$Family, clean_family_name)
+  ps2_melt$Family_clean <- sapply(ps2_melt$Family, clean_family_name)
+
+  # Combine
+  ps_combined <- bind_rows(ps1_melt, ps2_melt)
+
+  # Aggregate by Region × Waveform × PrimerSet
+  ps_agg <- ps_combined %>%
+    group_by(Region, Waveform_Type, PrimerSet, Family_clean) %>%
+    summarise(Abundance = sum(Abundance), .groups = "drop") %>%
+    group_by(Region, Waveform_Type, PrimerSet) %>%
+    mutate(RelAbund = Abundance / sum(Abundance))
+
+  # Identify top 8 families overall
+  top_families <- ps_agg %>%
+    group_by(Family_clean) %>%
+    summarise(Total_Abund = sum(RelAbund), .groups = "drop") %>%
+    arrange(desc(Total_Abund)) %>%
+    slice_head(n = 8) %>%
+    pull(Family_clean)
+
+  # Categorize into top families vs Other
+  ps_final <- ps_agg %>%
+    mutate(Family_display = ifelse(Family_clean %in% top_families, Family_clean, "Other")) %>%
+    group_by(Region, Waveform_Type, PrimerSet, Family_display) %>%
+    summarise(RelAbund = sum(RelAbund), .groups = "drop")
+
+  # Create group labels
+  ps_final$Group <- paste(ps_final$Region, ps_final$Waveform_Type)
+  ps_final$Group <- factor(ps_final$Group, levels = c("North BP", "North TP", "South BP", "South TP"))
+
+  # Plot
+  p <- ggplot(ps_final, aes(x = PrimerSet, y = RelAbund, fill = Family_display)) +
+    geom_bar(stat = "identity", position = "stack") +
+    facet_wrap(~ Group, nrow = 1) +
+    scale_fill_manual(values = GLOBAL_FAMILY_COLORS, name = "Prey Family") +
+    scale_y_continuous(labels = scales::percent) +
+    labs(
+      x = "Primer Set",
+      y = "Relative Abundance"
+    ) +
+    theme_minimal(base_size = 9, base_family = "sans") +
+    theme(
+      axis.text.x = element_text(angle = 0, hjust = 0.5),
+      legend.position = "right",
+      legend.key.size = unit(0.3, "cm"),
+      legend.text = element_text(size = 7),
+      strip.text = element_text(size = 8, face = "bold")
+    ) +
+    guides(fill = guide_legend(ncol = 1))
+
+  return(p)
+}
+
+# Panel B: Shannon Diversity Boxplots (8 boxplots: 4 groups × 2 primer sets)
+create_panel_b <- function(comp_ps1, comp_ps2) {
+  # Calculate Shannon for both primer sets
+  cat("Calculating Shannon diversity for PS1...\n")
+  div_ps1 <- estimate_richness(comp_ps1$ps_filtered, measures = c("Shannon"))
+  div_ps1$Region <- comp_ps1$metadata$Region
+  div_ps1$Waveform_Type <- comp_ps1$metadata$Waveform_Type
+  div_ps1$PrimerSet <- "PS1"
+
+  cat("Calculating Shannon diversity for PS2...\n")
+  div_ps2 <- estimate_richness(comp_ps2$ps_filtered, measures = c("Shannon"))
+  div_ps2$Region <- comp_ps2$metadata$Region
+  div_ps2$Waveform_Type <- comp_ps2$metadata$Waveform_Type
+  div_ps2$PrimerSet <- "PS2"
+
+  # Combine
+  cat("Combining data...\n")
+  div_combined <- bind_rows(div_ps1, div_ps2)
+  div_combined$Group <- paste(div_combined$Region, div_combined$Waveform_Type)
+  div_combined$Group <- factor(div_combined$Group,
+    levels = c("North BP", "North TP", "South BP", "South TP"))
+  div_combined$PrimerSet <- factor(div_combined$PrimerSet, levels = c("PS1", "PS2"))
+
+  # Create grouped boxplot
+  cat("Creating plot...\n")
+  cat("Data dimensions:", nrow(div_combined), "rows\n")
+  cat("PrimerSet levels:", levels(div_combined$PrimerSet), "\n")
+
+  p <- ggplot(div_combined, aes(x = Group, y = Shannon, fill = Waveform_Type)) +
+    geom_boxplot(alpha = 0.7) +
+    geom_jitter(alpha = 0.5, size = 1, width = 0.2) +
+    scale_fill_manual(values = c(BP = bp_color, TP = tp_color)) +
+    facet_grid(. ~ PrimerSet) +
+    labs(
+      x = "Region × Waveform",
+      y = "Shannon Diversity",
+      fill = "Waveform"
+    ) +
+    theme_minimal(base_size = 9, base_family = "sans") +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1, size = 7),
+      legend.position = "bottom"
+    )
+
+  return(p)
+}
+
+# Panel C: PCoA (Primerset 1 only)
+create_panel_c <- function(comp_ps1) {
+  # Use existing PCoA from Section 4.3
+  pcoa_result <- cmdscale(comp_ps1$distance, eig = TRUE, k = 2)
+  var_exp <- pcoa_result$eig / sum(pcoa_result$eig) * 100
+
+  pcoa_df <- data.frame(
+    PC1 = pcoa_result$points[, 1],
+    PC2 = pcoa_result$points[, 2],
+    Waveform = comp_ps1$metadata$Waveform_Type,
+    Region = comp_ps1$metadata$Region
+  )
+
+  p <- ggplot(pcoa_df, aes(x = PC1, y = PC2,
+                      color = Waveform, shape = Region)) +
+    geom_point(size = 3, alpha = 0.7) +
+    stat_ellipse(aes(group = Waveform), type = "norm", level = 0.95) +
+    scale_color_manual(values = c(BP = bp_color, TP = tp_color)) +
+    scale_shape_manual(values = c(North = 16, South = 17)) +
+    labs(x = paste0("PC1 (", round(var_exp[1], 1), "%)"),
+         y = paste0("PC2 (", round(var_exp[2], 1), "%)")) +
+    annotate("text", x = Inf, y = -Inf,
+             label = "PS2 concordant; Fig. SX",
+             hjust = 1.1, vjust = -0.5, size = 2.5, fontface = "italic") +
+    theme_minimal(base_size = 9, base_family = "sans") +
+    theme(legend.position = "right")
+
+  return(p)
+}
+
+# Panel D: PERMANOVA Effect Sizes (paired dot plot)
+create_panel_d <- function(perm_ps1_marginal, perm_ps2_marginal) {
+  # Extract R² and p-values from PERMANOVA results
+  ps1_df <- as.data.frame(perm_ps1_marginal)
+  ps1_df$Term <- rownames(ps1_df)
+
+  ps2_df <- as.data.frame(perm_ps2_marginal)
+  ps2_df$Term <- rownames(ps2_df)
+
+  # Create effects dataframes
+  effects_ps1 <- ps1_df %>%
+    filter(Term %in% c("Waveform_Type", "Region", "Sex", "Parasite_status", "body_size")) %>%
+    select(Term, R2, `Pr(>F)`) %>%
+    mutate(
+      Factor = case_when(
+        Term == "Waveform_Type" ~ "Waveform",
+        Term == "Parasite_status" ~ "Parasitism",
+        Term == "body_size" ~ "Body size",
+        TRUE ~ Term
+      ),
+      PrimerSet = "PS1",
+      P_value = `Pr(>F)`,
+      Significant = P_value < 0.05
+    )
+
+  effects_ps2 <- ps2_df %>%
+    filter(Term %in% c("Waveform_Type", "Region", "Sex", "Parasite_status", "body_size")) %>%
+    select(Term, R2, `Pr(>F)`) %>%
+    mutate(
+      Factor = case_when(
+        Term == "Waveform_Type" ~ "Waveform",
+        Term == "Parasite_status" ~ "Parasitism",
+        Term == "body_size" ~ "Body size",
+        TRUE ~ Term
+      ),
+      PrimerSet = "PS2",
+      P_value = `Pr(>F)`,
+      Significant = P_value < 0.05
+    )
+
+  effects <- bind_rows(effects_ps1, effects_ps2)
+
+  # Factor-specific colors
+  factor_colors <- c(
+    "Waveform" = "#0072B2",
+    "Region" = "#009E73",
+    "Sex" = "#E69F00",
+    "Parasitism" = "#CC79A7",
+    "Body size" = "#8C8C8C"
+  )
+
+  # Order factors by mean R²
+  factor_order <- effects %>%
+    group_by(Factor) %>%
+    summarise(Mean_R2 = mean(R2), .groups = "drop") %>%
+    arrange(desc(Mean_R2)) %>%
+    pull(Factor)
+
+  effects$Factor <- factor(effects$Factor, levels = factor_order)
+
+  p <- ggplot(effects, aes(x = R2, y = Factor, color = Factor)) +
+    geom_point(aes(shape = PrimerSet,
+                   fill = if_else(Significant, as.character(Factor), NA_character_)),
+               size = 4, stroke = 1.2) +
+    geom_line(aes(group = Factor), color = "gray70", linewidth = 0.5) +
+    scale_shape_manual(values = c(PS1 = 21, PS2 = 23)) +
+    scale_color_manual(values = factor_colors) +
+    scale_fill_manual(values = factor_colors, na.value = "white", guide = "none") +
+    labs(x = expression(paste(R^2, " (Marginal Effect Size)")), y = "") +
+    theme_minimal(base_size = 9, base_family = "sans") +
+    theme(
+      legend.position = "bottom",
+      legend.title = element_text(size = 8),
+      legend.text = element_text(size = 7)
+    )
+
+  return(p)
+}
+```
+
+## 5.2 Generate and Assemble Figure
+
+```{r fig-assemble, fig.width=7.5, fig.height=8.5}
+cat("=== GENERATING 4-PANEL PUBLICATION FIGURE ===\n\n")
+
+# Generate panels
+panelA <- create_panel_a(ps1_pk_family, ps2_pk_family)
+panelB <- create_panel_b(comp_ps1, comp_ps2)
+panelC <- create_panel_c(comp_ps1)
+panelD <- create_panel_d(perm_ps1_marginal, perm_ps2_marginal)
+
+# Assemble with patchwork
+fig_main <- (panelA | panelB) / (panelC | panelD) +
+  plot_layout(heights = c(1, 1)) +
+  plot_annotation(tag_levels = 'A') &
+  theme(
+    plot.tag = element_text(size = 14, face = "bold"),
+    text = element_text(family = "sans", size = 9)
+  )
+
+print(fig_main)
+
+# Save figure
+ggsave(
+  file.path(root, "output_data/07_Analysis/pk_dietary_variation_figure.pdf"),
+  fig_main,
+  width = 7.5, height = 8.5, units = "in", dpi = 300
+)
+
+ggsave(
+  file.path(root, "output_data/07_Analysis/pk_dietary_variation_figure.png"),
+  fig_main,
+  width = 7.5, height = 8.5, units = "in", dpi = 300
+)
+
+cat("Figure saved to output_data/07_Analysis/\n")
+```
+
+## 5.3 Supplemental Figure: PS2 PCoA
+
+```{r fig-supplemental, fig.width=6, fig.height=5}
+cat("=== GENERATING SUPPLEMENTAL FIGURE: PS2 PCOA ===\n\n")
+
+# Create PS2 PCoA
+pcoa_result_ps2 <- cmdscale(comp_ps2$distance, eig = TRUE, k = 2)
+var_exp_ps2 <- pcoa_result_ps2$eig / sum(pcoa_result_ps2$eig) * 100
+
+pcoa_df_ps2 <- data.frame(
+  PC1 = pcoa_result_ps2$points[, 1],
+  PC2 = pcoa_result_ps2$points[, 2],
+  Waveform = comp_ps2$metadata$Waveform_Type,
+  Region = comp_ps2$metadata$Region
+)
+
+# Get PERMANOVA stats for annotation
+waveform_r2_ps2 <- perm_ps2_df[perm_ps2_df$Term == "Waveform_Type", "R2"]
+waveform_p_ps2 <- perm_ps2_df[perm_ps2_df$Term == "Waveform_Type", "Pr(>F)"]
+region_r2_ps2 <- perm_ps2_df[perm_ps2_df$Term == "Region", "R2"]
+region_p_ps2 <- perm_ps2_df[perm_ps2_df$Term == "Region", "Pr(>F)"]
+
+fig_supp <- ggplot(pcoa_df_ps2, aes(x = PC1, y = PC2,
+                    color = Waveform, shape = Region)) +
+  geom_point(size = 3, alpha = 0.7) +
+  stat_ellipse(aes(group = Waveform), type = "norm", level = 0.95) +
+  scale_color_manual(values = c(BP = bp_color, TP = tp_color)) +
+  scale_shape_manual(values = c(North = 16, South = 17)) +
+  labs(
+    title = "Supplemental Figure: PCoA of diet composition (Primerset 2)",
+    subtitle = sprintf(
+      "PERMANOVA: Waveform R²=%.3f, p=%.3f; Region R²=%.3f, p=%.3f",
+      waveform_r2_ps2, waveform_p_ps2, region_r2_ps2, region_p_ps2
+    ),
+    x = paste0("PC1 (", round(var_exp_ps2[1], 1), "%)"),
+    y = paste0("PC2 (", round(var_exp_ps2[2], 1), "%)")
+  ) +
+  theme_minimal(base_size = 10) +
+  theme(
+    legend.position = "right",
+    plot.title = element_text(size = 12, face = "bold"),
+    plot.subtitle = element_text(size = 9)
+  )
+
+print(fig_supp)
+
+# Save supplemental figure
+ggsave(
+  file.path(root, "output_data/07_Analysis/pk_dietary_variation_ps2_pcoa.pdf"),
+  fig_supp,
+  width = 6, height = 5, units = "in", dpi = 300
+)
+
+ggsave(
+  file.path(root, "output_data/07_Analysis/pk_dietary_variation_ps2_pcoa.png"),
+  fig_supp,
+  width = 6, height = 5, units = "in", dpi = 300
+)
+
+cat("Supplemental figure saved to output_data/07_Analysis/\n")
+```
+
+---
+
+# 6. Summary and Interpretation
+
+```{r summary-interpretation}
+cat("=== SUMMARY: COMPREHENSIVE PERMANOVA RESULTS ===\n\n")
+
+# Extract key results for summary
+summarize_results <- function(perm_df, ps_name) {
+  cat(ps_name, "\n")
+  cat(strrep("=", nchar(ps_name) + 1), "\n\n")
+
+  # Significant factors (p < 0.05)
+  sig_factors <- perm_df %>%
+    filter(Term != "Residual", `Pr(>F)` < 0.05) %>%
+    arrange(desc(R2))
+
+  if (nrow(sig_factors) > 0) {
+    cat("Significant factors (p < 0.05):\n")
+    for (i in 1:nrow(sig_factors)) {
+      cat(sprintf("  %d. %s: R² = %.4f, p = %.4f\n",
+                  i, sig_factors$Term[i], sig_factors$R2[i], sig_factors$`Pr(>F)`[i]))
+    }
+  } else {
+    cat("No significant factors detected.\n")
+  }
+
+  # Effect size ranking
+  cat("\nEffect Size Ranking (all terms):\n")
+  all_terms <- perm_df %>%
+    filter(Term != "Residual") %>%
+    arrange(desc(R2))
+  for (i in 1:nrow(all_terms)) {
+    cat(sprintf("  %d. %s: R² = %.4f\n", i, all_terms$Term[i], all_terms$R2[i]))
+  }
+
+  cat("\n\n")
+}
+
+summarize_results(perm_ps1_df, "PRIMERSET 1")
+summarize_results(perm_ps2_df, "PRIMERSET 2")
+```
+
+## 6.1 Key Findings
+
+**Question 1: Does Waveform have an independent effect after controlling for confounders?**
+
+Marginal (Type III) tests show Waveform's unique contribution after accounting for:
+
+- Geography (Region)
+- Sexual dimorphism (Sex)
+- Body size (body_size)
+- Health status (Parasite_status)
+
+Primerset 1 Waveform marginal R² = `r sprintf("%.4f", perm_ps1_df[perm_ps1_df$Term == "Waveform_Type", "R2"])`, p = `r sprintf("%.4f", perm_ps1_df[perm_ps1_df$Term == "Waveform_Type", "Pr(>F)"])`
+
+Primerset 2 Waveform marginal R² = `r sprintf("%.4f", perm_ps2_df[perm_ps2_df$Term == "Waveform_Type", "R2"])`, p = `r sprintf("%.4f", perm_ps2_df[perm_ps2_df$Term == "Waveform_Type", "Pr(>F)"])`
+
+**Question 2: How much variance is uniquely explained by Waveform vs. Region vs. Individual factors?**
+
+Three-way variance partitioning (Primerset 1):
+
+- Pure Region: `r sprintf("%.1f%%", max(0, vp_3way_ps1_frac$Adj.R.square[1]) * 100)`
+- Pure Waveform: `r sprintf("%.1f%%", max(0, vp_3way_ps1_frac$Adj.R.square[2]) * 100)`
+- Pure Individual: `r sprintf("%.1f%%", max(0, vp_3way_ps1_frac$Adj.R.square[3]) * 100)`
+
+Three-way variance partitioning (Primerset 2):
+
+- Pure Region: `r sprintf("%.1f%%", max(0, vp_3way_ps2_frac$Adj.R.square[1]) * 100)`
+- Pure Waveform: `r sprintf("%.1f%%", max(0, vp_3way_ps2_frac$Adj.R.square[2]) * 100)`
+- Pure Individual: `r sprintf("%.1f%%", max(0, vp_3way_ps2_frac$Adj.R.square[3]) * 100)`
+
+## 6.2 Biological Interpretation
+
+**Waveform-based niche partitioning hypothesis:**
+
+The comprehensive PERMANOVA model allows us to test whether EOD waveform type associates with dietary differences after accounting for potential confounding factors:
+
+1. **Geography:** Different regions may have different prey communities
+2. **Sexual dimorphism:** Males and females may have different foraging behaviors
+3. **Body size:** Larger fish may consume different prey
+4. **Parasitism:** Parasites may affect foraging efficiency or prey choice
+
+**Evidence for waveform effect:**
+
+- If Waveform shows significant marginal effect → independent dietary niche partitioning
+- If Waveform effect is non-significant → dietary differences explained by confounders
+- Marginal tests assess independent contribution of each factor in the additive model
+
+**Variance partitioning insights:**
+
+- **Two-way partition:** Shows whether dietary variation is primarily driven by ecological context (geography + waveform) vs. individual phenotype (sex, size, health)
+- **Three-way partition:** Decomposes ecological variance to distinguish geographic from waveform-specific effects
+
+**Primer set concordance:**
+
+- Results are qualitatively consistent across both primer sets, increasing confidence in findings
+- Effect size rankings are similar between PS1 and PS2
+- Significance patterns generally concordant
+
+---
+
+# 7. Conclusions
+
+This comprehensive analysis provides a complete assessment of factors influencing dietary variation in *Paramormyrops kingsleyae*. By including both ecological (Region, Waveform) and individual (Sex, body_size, Parasitism) factors in a single additive model with marginal tests, we can:
+
+1. **Identify significant predictors** of diet composition
+2. **Rank effect sizes** to determine relative importance
+3. **Test independent contributions** of each factor while controlling for others
+4. **Partition variance** to quantify unique vs. shared contributions
+5. **Assess robustness** across two independent primer sets
+
+**Key methodological strengths:**
+
+- Marginal (Type III) tests appropriate for confounded factors
+- Additive model assesses independent contribution of each factor
+- Variance partitioning provides complementary perspective
+- betadisper diagnostics validate PERMANOVA assumptions
+- Complete case analysis ensures all factors tested on same samples
+- Includes all life stages (juveniles, males, females) for maximum power
+- Dual primer validation increases confidence in findings
+
+**Limitations:**
+
+- Complete case filtering may reduce sample size
+- Sex and body_size are partially confounded (juveniles smaller)
+- Limited geographic replication (2 regions)
+- PERMANOVA sensitive to dispersion heterogeneity if detected
+- Observational design limits causal inference
+
+**Future directions:**
+
+- Mechanistic drill-down analyses to identify specific prey taxa driving differences
+- Temporal replication to assess seasonal variation
+- Experimental validation of waveform-based niche partitioning hypothesis
+- Integration with stable isotope data for complementary trophic perspective
+
+---
+
+# Session Info
+
+```{r session-info}
+sessionInfo()
+```

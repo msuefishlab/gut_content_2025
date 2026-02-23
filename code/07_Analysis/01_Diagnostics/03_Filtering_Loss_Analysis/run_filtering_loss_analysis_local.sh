@@ -1,22 +1,22 @@
 #!/bin/bash
 
 # ==============================================================================
-# Taxonomy Assignment Diagnostics Analysis - Local Wrapper Script
+# Filtering Loss Analysis - Local Wrapper Script
 # ==============================================================================
-# Purpose: Execute comprehensive analysis of taxonomy assignment rates between
-#          PS1 and PS2 primer sets (LOCAL EXECUTION)
+# Purpose: Quantify taxonomy filtering loss to determine if differential
+#          filtering rates could explain compositional differences (LOCAL)
 # ==============================================================================
 
-# Determine repository root (script is in code/07_Analysis/)
+# Determine repository root (script is in code/07_Analysis/01_Diagnostics/03_Filtering_Loss_Analysis/)
 script_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-export root="$( cd "${script_dir}/../.." && pwd )"
+export root="$( cd "${script_dir}/../../../.." && pwd )"
 
 # Create output directory
-output_dir=${root}/output_data/07_Analysis/assignment_diagnostics
-mkdir -p ${output_dir}/{tables,sequences,figures}
+output_dir="${root}/output_data/07_Analysis/filtering_loss_analysis"
+mkdir -p "${output_dir}"/{tables,figures,report}
 
 echo "========================================"
-echo "Taxonomy Assignment Diagnostics Analysis"
+echo "Filtering Loss Analysis"
 echo "========================================"
 echo ""
 echo "Repository root: ${root}"
@@ -26,7 +26,7 @@ echo ""
 
 # Run R analysis script directly
 echo "Starting R analysis..."
-Rscript ${root}/code/07_Analysis/assignment_diagnostics_analysis.R
+Rscript "${root}/code/07_Analysis/01_Diagnostics/03_Filtering_Loss_Analysis/filtering_loss_analysis.R"
 
 # Check exit status
 if [ $? -eq 0 ]; then
@@ -38,10 +38,13 @@ if [ $? -eq 0 ]; then
     echo "Review outputs at: ${output_dir}"
     echo ""
     echo "Key files:"
-    echo "  - assignment_diagnostics_report.md (full report)"
-    echo "  - figures/ (all diagnostic plots)"
-    echo "  - sequences/ (FASTA files for BLAST verification)"
-    echo "  - tables/ (all data tables)"
+    echo "  - report/filtering_loss_report.md (full report)"
+    echo "  - figures/ (5 PDF plots)"
+    echo "  - tables/ (6 CSV files)"
+    echo ""
+    echo "Quick summary:"
+    echo "  - global_filtering_summary.csv (overall loss rates)"
+    echo "  - statistical_tests_summary.csv (significance tests)"
     echo ""
 else
     echo ""

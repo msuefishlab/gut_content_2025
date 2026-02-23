@@ -13,7 +13,7 @@ set -u  # Exit on undefined variable
 
 # Get script directory and repository root
 script_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-export root="$( cd "${script_dir}/../.." && pwd )"
+export root="$( cd "${script_dir}/../../../.." && pwd )"
 
 # Define output directory
 output_dir="${root}/output_data/07_Analysis/local_barcode_contribution"
@@ -62,7 +62,7 @@ echo "Starting analysis..."
 echo "─────────────────────────────────────────────────────────────────────"
 echo ""
 
-Rscript "${root}/code/07_Analysis/local_barcode_contribution_analysis.R"
+Rscript "${root}/code/07_Analysis/01_Diagnostics/04_Local_Barcode_Analysis/local_barcode_contribution_analysis.R"
 
 # Check exit status
 if [ $? -eq 0 ]; then

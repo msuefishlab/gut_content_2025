@@ -1,0 +1,235 @@
+---
+title: "Gut Content Metabarcoding Study: Sample Metadata Summary"
+author: ""
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+output:
+  word_document:
+    reference_docx: null
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, fig.width = 7)
+
+library(dplyr)
+library(readr)
+library(flextable)
+
+# Set flextable defaults for publication quality
+set_flextable_defaults(
+  font.family = "Times New Roman",
+  font.size = 11,
+  padding = 6
+)
+```
+
+```{r load-data, include=FALSE}
+# Read sample-to-fish mapping files for both primer sets
+# Skip the #q2:types row (comment = "#")
+ps1_samples <- read_tsv(
+  "../input_data/metadata/primerset1_sample_to_fish.tsv",
+  comment = "#",
+  show_col_types = FALSE
+) %>%
+  filter(!is.na(fish_id)) %>%  # Remove BLANK samples
+  mutate(Primer_Set = "PS1")
+
+ps2_samples <- read_tsv(
+  "../input_data/metadata/primerset2_sample_to_fish.tsv",
+  comment = "#",
+  show_col_types = FALSE
+) %>%
+  filter(!is.na(fish_id)) %>%  # Remove BLANK samples
+  mutate(Primer_Set = "PS2")
+
+# Combine both primer sets
+all_samples <- bind_rows(ps1_samples, ps2_samples)
+
+# Read fish metadata (also skip #q2:types row)
+fish_metadata <- read_tsv(
+  "../input_data/metadata/fish_id_metadata.tsv",
+  comment = "#",
+  show_col_types = FALSE
+)
+
+# Join sample data with fish metadata
+data <- all_samples %>%
+  left_join(fish_metadata, by = c("fish_id" = "sampleid")) %>%
+  mutate(Locality_Name = trimws(Locality_Name)) %>%
+  rename(Sample_Name = fish_id, Sample_ID = sampleid)
+```
+
+# Dataset Overview
+
+This report summarizes the metadata for `r n_distinct(data$Sample_Name)`
+distinct fish samples analyzed in the gut content metabarcoding study.
+Of these, `r data %>% filter(Primer_Set == "PS1") %>% distinct(Sample_Name) %>% nrow()`
+samples were sequenced with primer set PS1 and
+`r data %>% filter(Primer_Set == "PS2") %>% distinct(Sample_Name) %>% nrow()`
+samples were sequenced with primer set PS2, resulting in
+`r nrow(data)` total sequencing runs.
+
+---
+
+# Dataset-Wide Statistics
+
+## Total Sample Count
+
+**Total distinct samples:** `r n_distinct(data$Sample_Name)`
+
+## Samples by Species
+
+```{r species-table}
+samples_by_species <- data %>%
+  group_by(Genus, Species) %>%
+  summarise(n_samples = n_distinct(Sample_Name), .groups = "drop") %>%
+  arrange(Genus, Species)
+
+samples_by_species %>%
+  flextable() %>%
+  set_header_labels(
+    Genus = "Genus",
+    Species = "Species",
+    n_samples = "N Samples"
+  ) %>%
+  theme_booktabs() %>%
+  autofit() %>%
+  align(j = 3, align = "center", part = "all") %>%
+  bold(part = "header")
+```
+
+**Total species:** `r nrow(samples_by_species)` across `r n_distinct(samples_by_species$Genus)` genera
+
+## Primer Set Coverage
+
+**Samples sequenced with both primer sets (PS1 and PS2):** `r data %>% group_by(Sample_Name) %>% summarise(n_primer_sets = n_distinct(Primer_Set), .groups = "drop") %>% filter(n_primer_sets == 2) %>% nrow()`
+
+## Samples by Sex
+
+```{r sex-table}
+samples_by_sex <- data %>%
+  group_by(Sex) %>%
+  summarise(n_samples = n_distinct(Sample_Name), .groups = "drop") %>%
+  mutate(Sex = ifelse(is.na(Sex), "Unknown", Sex)) %>%
+  arrange(Sex)
+
+samples_by_sex %>%
+  flextable() %>%
+  set_header_labels(
+    Sex = "Sex",
+    n_samples = "N Samples"
+  ) %>%
+  theme_booktabs() %>%
+  autofit() %>%
+  align(j = 2, align = "center", part = "all") %>%
+  bold(part = "header")
+```
+
+## Parasite Prevalence
+
+**Samples with parasites detected:** `r data %>% filter(Parasite == 1) %>% summarise(n_samples = n_distinct(Sample_Name)) %>% pull(n_samples)` of `r n_distinct(data$Sample_Name)` (`r round(100 * (data %>% filter(Parasite == 1) %>% summarise(n_samples = n_distinct(Sample_Name)) %>% pull(n_samples)) / n_distinct(data$Sample_Name), 1)`%)
+
+---
+
+# Locality-Level Breakdown
+
+```{r locality-stats, results='asis'}
+localities <- data %>%
+  distinct(Locality_Name) %>%
+  pull(Locality_Name) %>%
+  sort()
+
+for (locality in localities) {
+  cat("\n## ", locality, "\n\n", sep = "")
+
+  locality_data <- data %>% filter(Locality_Name == !!locality)
+
+  # Total samples
+  loc_total <- locality_data %>%
+    summarise(n_samples = n_distinct(Sample_Name)) %>%
+    pull(n_samples)
+
+  cat("**Total samples:** ", loc_total, "\n\n", sep = "")
+
+  # Species composition
+  loc_species <- locality_data %>%
+    group_by(Genus, Species) %>%
+    summarise(n_samples = n_distinct(Sample_Name), .groups = "drop") %>%
+    arrange(Genus, Species)
+
+  if (nrow(loc_species) > 0) {
+    cat("**Species composition:**\n\n")
+    ft <- loc_species %>%
+      flextable() %>%
+      set_header_labels(
+        Genus = "Genus",
+        Species = "Species",
+        n_samples = "N"
+      ) %>%
+      theme_booktabs() %>%
+      autofit() %>%
+      align(j = 3, align = "center", part = "all") %>%
+      bold(part = "header") %>%
+      fontsize(size = 10, part = "all")
+
+    ft <- ft %>% flextable::width(j = 1, width = 1.2) %>%
+      flextable::width(j = 2, width = 2.5) %>%
+      flextable::width(j = 3, width = 0.6)
+
+    flextable_to_rmd(ft)
+    cat("\n\n")
+  }
+
+  # Primer set coverage
+  loc_both_primers <- locality_data %>%
+    group_by(Sample_Name) %>%
+    summarise(n_primer_sets = n_distinct(Primer_Set), .groups = "drop") %>%
+    filter(n_primer_sets == 2) %>%
+    nrow()
+
+  cat("**Samples with both primer sets:** ", loc_both_primers, " of ", loc_total,
+      " (", round(100 * loc_both_primers / loc_total, 1), "%)\n\n", sep = "")
+
+  # Sex distribution
+  loc_sex <- locality_data %>%
+    group_by(Sex) %>%
+    summarise(n_samples = n_distinct(Sample_Name), .groups = "drop") %>%
+    mutate(Sex = ifelse(is.na(Sex), "Unknown", Sex)) %>%
+    arrange(Sex)
+
+  if (nrow(loc_sex) > 0) {
+    cat("**Sex distribution:**\n\n")
+    ft <- loc_sex %>%
+      flextable() %>%
+      set_header_labels(
+        Sex = "Sex",
+        n_samples = "N"
+      ) %>%
+      theme_booktabs() %>%
+      autofit() %>%
+      align(j = 2, align = "center", part = "all") %>%
+      bold(part = "header") %>%
+      fontsize(size = 10, part = "all")
+
+    ft <- ft %>% flextable::width(j = 1, width = 1.5) %>%
+      flextable::width(j = 2, width = 0.6)
+
+    flextable_to_rmd(ft)
+    cat("\n\n")
+  }
+
+  # Parasites
+  loc_parasites <- locality_data %>%
+    filter(Parasite == 1) %>%
+    summarise(n_samples = n_distinct(Sample_Name)) %>%
+    pull(n_samples)
+
+  cat("**Samples with parasites:** ", loc_parasites, " of ", loc_total,
+      " (", round(100 * loc_parasites / loc_total, 1), "%)\n\n", sep = "")
+
+  cat("---\n\n")
+}
+```
+
+# Summary
+
+This dataset comprises samples from `r length(localities)` localities across the study region, with the majority of samples belonging to the genus *Paramormyrops* (particularly *P. kingsleyae*). Most samples (`r round(100 * (data %>% group_by(Sample_Name) %>% summarise(n_primer_sets = n_distinct(Primer_Set)) %>% filter(n_primer_sets == 2) %>% nrow()) / n_distinct(data$Sample_Name), 1)`%) were successfully sequenced with both primer sets, providing comprehensive coverage for downstream metabarcoding analyses.

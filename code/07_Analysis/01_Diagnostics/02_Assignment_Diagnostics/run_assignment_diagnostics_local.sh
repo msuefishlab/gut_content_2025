@@ -1,35 +1,32 @@
 #!/bin/bash
 
 # ==============================================================================
-# Taxonomy Assignment Diagnostics Analysis - Wrapper Script
+# Taxonomy Assignment Diagnostics Analysis - Local Wrapper Script
 # ==============================================================================
 # Purpose: Execute comprehensive analysis of taxonomy assignment rates between
-#          PS1 and PS2 primer sets
+#          PS1 and PS2 primer sets (LOCAL EXECUTION)
 # ==============================================================================
 
-# Determine repository root (script is in code/07_Analysis/)
+# Determine repository root (script is in code/07_Analysis/01_Diagnostics/02_Assignment_Diagnostics/)
 script_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-export root="$( cd "${script_dir}/../.." && pwd )"
-
-# Source environment variables
-source ${root}/gut_contents.env
+export root="$( cd "${script_dir}/../../../.." && pwd )"
 
 # Create output directory
-output_dir=${root}/output_data/07_Analysis/assignment_diagnostics
-mkdir -p ${output_dir}/{tables,sequences,figures}
+output_dir="${root}/output_data/07_Analysis/assignment_diagnostics"
+mkdir -p "${output_dir}"/{tables,sequences,figures}
 
 echo "========================================"
 echo "Taxonomy Assignment Diagnostics Analysis"
 echo "========================================"
 echo ""
 echo "Repository root: ${root}"
-echo "R image: ${rimage}"
 echo "Output directory: ${output_dir}"
+echo "Running locally with R (no Singularity)"
 echo ""
 
-# Run R analysis script via Singularity
+# Run R analysis script directly
 echo "Starting R analysis..."
-singularity exec ${rimage} Rscript ${root}/code/07_Analysis/assignment_diagnostics_analysis.R
+Rscript "${root}/code/07_Analysis/01_Diagnostics/02_Assignment_Diagnostics/assignment_diagnostics_analysis.R"
 
 # Check exit status
 if [ $? -eq 0 ]; then
